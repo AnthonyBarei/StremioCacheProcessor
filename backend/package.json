@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:dev": "nodemon --exec ts-node server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/axios": "^0.14.0",
+    "@types/express": "^4.17.21",
+    "@types/mongodb": "^4.0.7",
+    "@types/socket.io": "^3.0.2",
+    "axios": "^1.7.2",
+    "axios-cookiejar-support": "^5.0.2",
+    "chalk": "^5.3.0",
+    "clipboardy": "^4.0.0",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1",
+    "mongodb": "^6.6.2",
+    "ncp": "^2.0.0",
+    "qbittorrent-api-v2": "^1.2.2",
+    "socket.io": "^4.7.5",
+    "tough-cookie": "^4.1.4",
+    "typescript": "^5.4.5"
+  },
+  "devDependencies": {
+    "@types/clipboardy": "^2.0.1",
+    "@types/ncp": "^2.0.8",
+    "@types/qbittorrent-api-v2": "^1.2.3",
+    "@types/tough-cookie": "^4.0.5",
+    "nodemon": "^3.1.2",
+    "ts-node": "^10.9.2"
+  }
+}

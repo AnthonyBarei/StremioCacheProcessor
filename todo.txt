@@ -1,0 +1,17 @@
+Button on home to reload manually the metadatas (redetect folders in server)
+Button on MovieCard to retry detecting the stremio state downloading 
+Better display of the stremio state on MovieCard
+
+Add time reload for stremio downloading check in configuration
+
+options to add to movie card :
+    - display full metadata
+    - cancel all websocket actions (checking download, download)
+
+Add Plex Server management
+Add Plex metadata manager if possible (as command line in config)
+
+
+DONE :
+- Detect event when files are created in stremio cache !
+make the copy icon colored when ready to copy cache files ! 

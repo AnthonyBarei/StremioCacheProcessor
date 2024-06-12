@@ -1,0 +1,1 @@
+declare module 'qbittorrent-api-v2';
