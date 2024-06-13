@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { Box, Button, Typography, Alert, Divider, } from "@mui/material";
-import { FolderProcess, StremioStateFolderProcessResync } from "../../../../interfaces";
+import { Box, Typography, Alert, Divider, } from "@mui/material";
+import { FolderProcess, StremioStateFolderProcess } from "../../../../interfaces";
 import { socket } from "../../socket";
-import LinearWithValueLabel from "../Layouts/Linear";
-import LinearIndeterminate from "../Layouts/LinearIndeterminate";
 
 import { AlertColor } from "@mui/material";
 
 import Modal from '@mui/material/Modal';
+import StremioState from "./StremioState";
 
 const style = {
   position: 'absolute',
@@ -19,24 +18,18 @@ const style = {
   border: '2px solid #000',
   boxShadow: 24,
   p: 4,
+  maxHeight: '90vh',
+  overflowY: 'auto',
 };
 
-function formatBytes(bytes: number, decimals = 2) {
-    if (bytes === 0) return '0 Bytes';
-
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
-
-export default function StremioModal({ metadata, open, setOpen, copied, setCopied, downloaded, setDownloaded }: { 
+export default function StremioModal({ metadata, open, setOpen, stremioState, setStremioState, waiting, setWaiting, copied, setCopied, downloaded, setDownloaded }: { 
     metadata: FolderProcess, 
     open: boolean, 
     setOpen: React.Dispatch<React.SetStateAction<boolean>>
+    stremioState: StremioStateFolderProcess,
+    setStremioState: React.Dispatch<React.SetStateAction<StremioStateFolderProcess>>
+    waiting: boolean,
+    setWaiting: React.Dispatch<React.SetStateAction<boolean>>
     copied: boolean,
     setCopied: React.Dispatch<React.SetStateAction<boolean>>
     downloaded: boolean,
@@ -47,25 +40,12 @@ export default function StremioModal({ metadata, open, setOpen, copied, setCopie
     const [alert, setAlert] = useState<string>('');
     const [alertType, setAlertType] = useState<string>('');
 
-    const [downloading, setDownloading] = useState(false);
-    const [downloadSize, setDownloadSize] = useState(0);
-    const [downloadSpeed, setDownloadSpeed] = useState(0);
-    const [size, setSize] = useState(0);
-    const [progress, setProgress] = useState(0);
-    const [waiting, setWaiting] = useState(false);
-
-    useEffect(() => {        
-        socket.on('meta-resync', (response: StremioStateFolderProcessResync) => {  
+    useEffect(() => {                
+        socket.on('meta-resync', (response: StremioStateFolderProcess) => {  
             if (response.id != metadata.id) return;
             if (waiting) setWaiting(false);
-            
-            setDownloading(response.downloading);
-            setDownloadSize(response.downloadSize);
-            setDownloadSpeed(response.downloadSpeed);
-            setSize(response.size);
-            setProgress(response.progress);
             setDownloaded(response.downloaded);
-
+            setStremioState(response);
             setSteps(['Resynched.', ...steps]);
         });
 
@@ -111,18 +91,8 @@ export default function StremioModal({ metadata, open, setOpen, copied, setCopie
             socket.off('stremio-copying');
             socket.off('stremio-copied');
         };
-    }, [metadata.id, downloaded, setCopied, steps, waiting, setDownloaded]);
+    }, [metadata.id, downloaded, setCopied, steps, waiting, setDownloaded, setStremioState, setWaiting]);
 
-    const handleResync = () => {
-        if (downloaded) return;
-        socket.emit('stremio-metacheck', { id: metadata.id, meta: metadata.meta });
-        setWaiting(true);
-    };
-
-    const handleCopy = () => {
-        if (!downloaded) return;
-        socket.emit('stremio-copy', { id: metadata.id });
-    };
     
 
     return (
@@ -139,41 +109,14 @@ export default function StremioModal({ metadata, open, setOpen, copied, setCopie
                 </Box>
                 <Divider sx={{ my: 2 }}/>
 
-                {downloaded && (
-                    <>
-                        <Typography variant="body2" component="div">File Downloaded.</Typography>
-                        {copied && (
-                            <Typography variant="body2" component="div">File Copied.</Typography>
-                        )}
-                        {!waiting && !copied && (
-                            <Button variant="contained" onClick={handleCopy} sx={{ mt: 2 }}>Copy Cache Files to Local path</Button>
-                        )}
-                    </>
-                )}
-
-                {!downloaded && (
-                    <>
-                        {!downloading && (
-                            <>
-                                <Typography variant="body2" component="div" sx={{ mb: 2 }}>No active downloads.</Typography>
-                                <Button variant="contained" onClick={() => handleResync()} fullWidth>Resync Cache State</Button>
-                            </>
-                        )}
-            
-                        {downloading && (
-                            <>
-                                <Typography variant="body2" component="div">Stream speed: {formatBytes(downloadSpeed)}</Typography>
-                                <Typography variant="body2" component="div">Cached: {formatBytes(downloadSize)} / {progress}%</Typography>
-                                <Typography variant="body2" component="div">Total size: {formatBytes(size)}</Typography>
-                                <LinearWithValueLabel progress={progress}/>  
-                            </>
-                        )}
-                    </>
-                )}
-
-                {waiting && (
-                    <LinearIndeterminate/>   
-                )}
+                <StremioState 
+                    metadata={metadata} 
+                    stremioState={stremioState} 
+                    waiting={waiting} 
+                    setWaiting={setWaiting} 
+                    downloaded={downloaded} 
+                    copied={copied} 
+                />
 
                 {alert && (
                     <Alert severity={alertType as AlertColor} sx={{ mt: 2 }}>{alert}</Alert>

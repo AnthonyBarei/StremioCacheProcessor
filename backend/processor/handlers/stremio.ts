@@ -49,9 +49,7 @@ class Stremio extends StremioClient {
         this.io.on('connection', (socket: any) => {
             console.log('user connected on stremio');
             
-            socket.on('stremio-metacheck', async (data: any) => {   
-                console.log(this.checkingFolders.has(data.id));
-                 
+            socket.on('stremio-metacheck', async (data: any) => {                    
                 const folder = data.id;
                 const meta = data.meta;   
 
@@ -61,7 +59,7 @@ class Stremio extends StremioClient {
                 }       
 
                 if (this.checkingFolders.has(folder)) {
-                    this.io.emit('stremio-error', { hash: folder, message: `Folder ${folder} is already being checked` });
+                    // this.io.emit('stremio-error', { hash: folder, message: `Folder ${folder} is already being checked` });
                     return;
                 }
                 
@@ -263,7 +261,7 @@ class Stremio extends StremioClient {
         // Mark the folder as processed
         await this.db.save(folder, savedInfo);
 
-        this.io.emit('meta-resync', { id: folder, ...stremioState });        
+        this.io.emit('meta-resync', { id: folder, ...stremioState });                
 
         if (recheck) {
             setTimeout(() => {

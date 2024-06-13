@@ -150,6 +150,18 @@ class qBittorrentClient {
             throw new Error(error);
         }
     };
+
+    protected deleteTorrentApi = async (hash: string, deleteFiles: boolean) => {
+        try {
+            const data = new URLSearchParams();
+            data.append('hashes', hash);
+            data.append('deleteFiles', deleteFiles.toString());
+            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/delete`, data);
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error);
+        }
+    };
 }
 
 export default qBittorrentClient;

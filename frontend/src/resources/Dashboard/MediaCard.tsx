@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import { socket } from '../../socket';
 
@@ -7,51 +7,42 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
-import { FolderProcess } from "../../../../interfaces";
+import { FolderProcess, StremioStateFolderProcess } from "../../../../interfaces";
 
-import BasicModal from "../Torrent/TorrentModal";
 import StremioState from "../Stremio/StremioState";
 import PlexModal from "../Plex/PlexModal";
 import stremioLogo from '../../assets/stremio.png';
 import qbittorrentLogo from '../../assets/qbittorrent.svg';
 import plexLogo from '../../assets/plex.svg';
 import StremioModal from "../Stremio/StremioModal";
+import TorrentModal from "../Torrent/TorrentModal";
 
 
 const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeItem: (id: string) => void}) => {  
   const title = metadata.stremio.stremioState.title || metadata.meta.name;
+  // Stremio
   const [stremioModalOpen, setStremioModalOpen] = useState(false);
-  const [qbittorrentModalOpen, setQbittorrentModalOpen] = useState(false);
+  const [stremioState, setStremioState] = useState<StremioStateFolderProcess>(metadata.stremio.stremioState);
+  const [stremioWaiting, setStremioWaiting] = useState(false);
+  const [stremioDownloaded, setStremioDownloaded] = useState(metadata.stremio.stremioDownloaded);
+  const [stremioCopied, setStremioCopied] = useState(metadata.stremio.stremioCopied);
+  // Torrent
+  const [torrentModalOpen, setTorrentModalOpen] = useState(false);
+  // const [torrentState, setTorrentState] = useState(metadata.qbittorrent.qbittorrentState);
+  const [torrentAdded, setTorrentAdded] = useState(metadata.qbittorrent.qbittorrentAdded);
+  const [torrentDownloaded, setTorrentDownloaded] = useState(metadata.qbittorrent.qbittorrentDownloaded);
+  // Plex
   const [plexModalOpen, setPlexModalOpen] = useState(false);
-  const [added, setAdded] = useState(false);
+  // Delete
   const [deleteError, setDeleteError] = useState(false);
-  const [copied, setCopied] = useState(metadata.stremio.stremioCopied);
-  const [downloaded, setDownloaded] = useState(metadata.stremio.stremioDownloaded);
 
-  useEffect(() => {
-    socket.on('torrent-added', (response) => {
-      if (response.hash === metadata.id) {
-        setAdded(true);
-        setQbittorrentModalOpen(true);
-      }
-    });
 
-    return () => {
-      socket.off('torrent-added');
-    };
-  }, [metadata, metadata.id]);
-
-  const handleDownloadTorrent = () => {
-    if (added) {
-      setQbittorrentModalOpen(true);
-      return;
+  const handleTorrent = () => {
+    if (!torrentDownloaded) {
+      socket.emit('torrent-add', { hash: metadata.id });
+      console.log('Torrent added');
     }
-    
-    socket.emit('torrent-add', { hash: metadata.id });
-  };
-
-  const handleState = () => {
-    setQbittorrentModalOpen(true);
+    setTorrentModalOpen(true);
   };
 
   const handleMoreInfo = () => {
@@ -116,7 +107,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </Box>
             )}
 
-            {copied && (
+            {stremioCopied && (
               <Tooltip title="Watch" placement="top">
                 <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatch}>
                   <PlayCircleIcon color="success"/>
@@ -124,7 +115,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </Tooltip>
             )}
 
-            {!copied && (
+            {!stremioCopied && (
               <Tooltip title="Copy files from cache" placement="top">
                 <IconButton aria-label="Copy files from cache" sx={{ borderRadius: '10%' }} onClick={handleStremio}>
                   {/* <ContentCopyIcon color={readyToCopy ? "info" : "disabled"}/> */}
@@ -134,11 +125,21 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </Tooltip>
             )}
 
-            <Tooltip title="Download Torrent" placement="top">
-              <IconButton aria-label="Torrent Download" sx={{ borderRadius: '10%' }} onClick={added ? handleState : handleDownloadTorrent}>
-                <img src={qbittorrentLogo} alt="qBittorrent" style={{width: '20px', height: '20px'}}/>
-              </IconButton>
-            </Tooltip>
+            {!torrentDownloaded && (
+              <Tooltip title="Download Torrent" placement="top">
+                <IconButton aria-label="Torrent Download" sx={{ borderRadius: '10%' }} onClick={handleTorrent}>
+                  <img src={qbittorrentLogo} alt="qBittorrent" style={{width: '20px', height: '20px'}}/>
+                </IconButton>
+              </Tooltip>
+            )}
+
+            {torrentDownloaded && (
+              <Tooltip title="watch" placement="top">
+                <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatch}>
+                  <PlayCircleIcon color="success"/>
+                </IconButton>
+              </Tooltip>
+            )}
 
             <Tooltip title="Plex" placement="top">
               <IconButton aria-label="Plex" sx={{ borderRadius: '10%' }} onClick={handlePlex}>
@@ -160,16 +161,37 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
 
             <Typography variant="body2" color="text.secondary" sx={{mt: 2, mb: 2}}>{metadata.meta.description}</Typography>
 
-            <StremioState metadata={metadata} copied={copied} downloaded={downloaded}/>
+            <StremioState 
+              metadata={metadata} 
+              stremioState={stremioState} 
+              waiting={stremioWaiting} 
+              setWaiting={setStremioWaiting} 
+              copied={stremioCopied} 
+              downloaded={stremioDownloaded}
+            />
 
           </CardContent>
         </Box>
       </Card>
 
-      <StremioModal open={stremioModalOpen} setOpen={setStremioModalOpen} metadata={metadata} 
-      copied={copied} setCopied={setCopied} downloaded={downloaded} setDownloaded={setDownloaded}/>
-      <BasicModal open={qbittorrentModalOpen} setOpen={setQbittorrentModalOpen} hash={metadata.id}/>
-      <PlexModal open={plexModalOpen} setOpen={setPlexModalOpen} hash={metadata.id}/>
+      <StremioModal 
+        metadata={metadata} 
+        open={stremioModalOpen} setOpen={setStremioModalOpen} 
+        stremioState={stremioState} setStremioState={setStremioState}
+        waiting={stremioWaiting} setWaiting={setStremioWaiting}
+        copied={stremioCopied} setCopied={setStremioCopied} 
+        downloaded={stremioDownloaded} setDownloaded={setStremioDownloaded}
+      />
+      <TorrentModal 
+        hash={metadata.id} 
+        open={torrentModalOpen} 
+        setOpen={setTorrentModalOpen} 
+        added={torrentAdded} 
+        setAdded={setTorrentAdded}
+        downloaded={torrentDownloaded}
+        setDownloaded={setTorrentDownloaded}
+      />
+      <PlexModal hash={metadata.id} open={plexModalOpen} setOpen={setPlexModalOpen} />
     </Box>
   );
 }

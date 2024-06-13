@@ -1,17 +1,23 @@
-Button on home to reload manually the metadatas (redetect folders in server)
-Button on MovieCard to retry detecting the stremio state downloading 
-Better display of the stremio state on MovieCard
-
-Add time reload for stremio downloading check in configuration
 
 options to add to movie card :
     - display full metadata
     - cancel all websocket actions (checking download, download)
+    - correct metadata by choosing in stremio API !
 
-Add Plex Server management
-Add Plex metadata manager if possible (as command line in config)
+
+Add Plex metadata manager if possible (as command line in config) : 
+    After a bunch of tests, this is not recommended since kometa is supposed to be added as CRON on computer.
+    Also it will eat a lot of resources if allowing several execution of kometa through several MediaCards
+
+handle multiple watch possibilities (stremio, qbittorrent) wich means that each entity must have their own watch method
+qbittorent will be tricky since there is the possibility of downloading multiple files for one torrent
+in that case select first file 
 
 
 DONE :
 - Detect event when files are created in stremio cache !
-make the copy icon colored when ready to copy cache files ! 
+- make the copy icon colored when ready to copy cache files ! 
+- Add Plex Server management
+- Button on home to reload manually the metadatas (redetect folders in server)
+- Button on MovieCard to retry detecting the stremio state downloading 
+- Better display of the stremio state on MovieCard

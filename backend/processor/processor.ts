@@ -46,6 +46,7 @@ class Processor {
             this.config.qbittorrent.qbittorrentCredentials, 
             this.app,
             this.io,
+            this.db,
         );
         this.qBittorrent.buildEndpoints();
 
@@ -304,8 +305,10 @@ class Processor {
                     'stremioCopied': false
                 }, 
                 'qbittorrent': {
-                    'qbittorrentDownloaded': false, 
-                    'qbittorrentState': null
+                    'qbittorrentState': null,
+                    'qbittorrentAdded': false,
+                    'qbittorrentDownloaded': false,
+                    'qbittorrentCopied': false,
                 },
                 'plex': {
                     'plexCopied': false,

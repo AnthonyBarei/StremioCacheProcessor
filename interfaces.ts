@@ -40,19 +40,7 @@ interface Movie {
 }
 
 interface StremioStateFolderProcess {
-    name: string;
-    downloaded: boolean;
-    downloadSize: number;
-    downloadSpeed: number;
-    remainingTime: number | null;
-    progress: number;
-    size: number;
-    downloading: boolean;
-    title: string;
-}
-
-interface StremioStateFolderProcessResync {
-    id: string;
+    id?: string;
     name: string;
     downloaded: boolean;
     downloadSize: number;
@@ -71,7 +59,9 @@ interface StremioFolderProcess {
 }
 
 interface qBittorrentStateFolderProcess {
+    qbittorrentAdded: boolean;
     qbittorrentDownloaded: boolean;
+    qbittorrentCopied: boolean;
     qbittorrentState: null;
 }
 
@@ -210,7 +200,6 @@ export type {
     RowFile,
     TorrentInfo,
     StremioStateFolderProcess,
-    StremioStateFolderProcessResync,
     Library,
     RowLibrary,
     ConfigurationLibrary,
