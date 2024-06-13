@@ -1,33 +1,32 @@
 # Stremio Cache Processor
 
-This project is a Node.js backend that monitors the Stremio cache for new files. It uses an API to check for downloads and can optionally use the qBittorrent API to download files via magnet links. Once downloaded, users can copy files from the Stremio cache. If qBittorrent was used, the file is already in the destination.
+Stremio Cache Processor is an intermediary application designed to monitor and interact with the Stremio cache in real-time. It provides a robust solution for file manipulation, leveraging either native Windows copy functionality or the qBittorrent API. Furthermore, it offers the capability to upload files to a local Plex server and initiate library scans to incorporate new media.
 
-## Features
+## Key Features
 
-- Watchfolder to read Stremio cache
-- Use qBittorrent API to download files through magnet links
-- Copy files from Stremio cache or directly from qBittorrent destination
-- Upload files to local NAS Shield Pro TV
-- Scan Plex libraries to add media
-- Server checks if NordVPN, Stremio, and qBittorrent are running (none are required for the app to run)
+- Real-time Stremio cache monitoring
+- File manipulation via Windows copy or qBittorrent
+- File uploading to local NAS Shield Pro TV
+- Plex library scanning for media addition
+- Health checks for NordVPN, Stremio, and qBittorrent (not mandatory for application operation)
 
-## Technologies Used
+## Technology Stack
 
-- Node.js
-- Redis for storage
-- Socket.io for real-time communication
-- Axios for HTTP requests
-- fs spawn to start the file when it is downloaded
-- React for the frontend
+- Node.js for backend development
+- Redis for efficient data storage
+- Socket.io for real-time bidirectional event-based communication
+- Axios for promise-based HTTP requests
+- fs spawn to initiate file downloads
+- React for frontend development
 
 ## Frontend
 
-The frontend is built with React and includes a main page to display media being played on Stremio and a configuration page to configure the app.
+The frontend, developed using React, provides a user-friendly interface that displays media currently being played on Stremio. It also includes a configuration page for application settings.
 
-## Setup
+## Installation & Setup
 
-Provide instructions on how to setup and run your project here.
+Instructions for setting up and running the project will be provided here.
 
 ## License
 
-Include information about your license here.
+Details about the project's license will be provided here.
