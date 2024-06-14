@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Box, Typography, Alert, Divider, } from "@mui/material";
 import { FolderProcess, StremioStateFolderProcess } from "../../../../interfaces";
-import { socket } from "../../socket";
 
 import { AlertColor } from "@mui/material";
-
 import Modal from '@mui/material/Modal';
+
 import StremioState from "./StremioState";
+import { useSocket } from "../../providers/socketProvider";
 
 const style = {
   position: 'absolute',
@@ -40,60 +40,97 @@ export default function StremioModal({ metadata, open, setOpen, stremioState, se
     const [alert, setAlert] = useState<string>('');
     const [alertType, setAlertType] = useState<string>('');
 
+    const { socket } = useSocket();
+
+    const handleMetaResync = useCallback((response: StremioStateFolderProcess) => {
+        if (response.id != metadata.id) return;
+        if (waiting) setWaiting(false);
+        setDownloaded(response.downloaded);
+        setStremioState(response);
+        setSteps(['Resynched.', ...steps]);
+    }, [metadata.id, waiting, setWaiting, setDownloaded, setStremioState, steps]);
+
     useEffect(() => {                
-        socket.on('meta-resync', (response: StremioStateFolderProcess) => {  
-            if (response.id != metadata.id) return;
-            if (waiting) setWaiting(false);
-            setDownloaded(response.downloaded);
-            setStremioState(response);
-            setSteps(['Resynched.', ...steps]);
-        });
-
-        socket.on('stremio-error', (response: { hash: string, message: string }) => {
-            if (response.hash != metadata.id) return;
-            setSteps([response.message, ...steps]);
-            setAlert(response.message);
-            setAlertType('error');
-        });
-
-        socket.on('stremio-check-end', (response: { hash: string }) => {
-            if (response.hash != metadata.id) return;
-            setSteps(['Check ended.', ...steps]);
-            setWaiting(false);
-        });
-
-        socket.on('stremio-check-info', (response: { hash: string, message: string }) => {
-            if (response.hash != metadata.id) return;
-            setSteps([response.message, ...steps]);
-        });
-
-        socket.on('stremio-copying', (response: { hash: string, message: string }) => {
-            if (response.hash != metadata.id) return;
-            setSteps([response.message, ...steps]);
-            setWaiting(true);
-            setAlert('');
-        });
-
-        socket.on('stremio-copied', (response: { hash: string, message: string }) => {
-            if (response.hash != metadata.id) return;
-            setSteps(['File copied.', ...steps]);
-            setWaiting(false);
-            setAlert(response.message);
-            setAlertType('success');
-            setCopied(true);
-        });
+        socket.on('meta-resync', handleMetaResync);
 
         return () => {
-            socket.off('meta-resync');
-            socket.off('stremio-error');
-            socket.off('stremio-check-end');
-            socket.off('stremio-check-info');
-            socket.off('stremio-copying');
-            socket.off('stremio-copied');
+            socket.off('meta-resync', handleMetaResync);
         };
-    }, [metadata.id, downloaded, setCopied, steps, waiting, setDownloaded, setStremioState, setWaiting]);
+    }, [handleMetaResync, socket]);
 
-    
+    const handleStremioError = useCallback((response: { hash: string, message: string }) => {
+        if (response.hash != metadata.id) return;
+        setSteps([response.message, ...steps]);
+        setAlert(response.message);
+        setAlertType('error');
+    }, [metadata.id, steps]);
+
+    useEffect(() => {      
+        socket.on('stremio-error', handleStremioError);
+
+        return () => {
+            socket.off('stremio-error', handleStremioError);
+        };
+    }, [handleStremioError, socket]);
+
+    const handleStremioCheckEnd = useCallback((response: { hash: string }) => {
+        if (response.hash != metadata.id) return;
+        setSteps(['Check ended.', ...steps]);
+        setWaiting(false);
+    }, [metadata.id, steps, setWaiting]);
+
+    useEffect(() => {      
+        socket.on('stremio-check-end', handleStremioCheckEnd);
+
+        return () => {
+            socket.off('stremio-check-end', handleStremioCheckEnd);
+        };
+    }, [handleStremioCheckEnd, socket]);
+
+    const handleStremioCheckInfo = useCallback((response: { hash: string, message: string }) => {
+        if (response.hash != metadata.id) return;
+        setSteps([response.message, ...steps]);
+    }, [metadata.id, steps]);
+
+    useEffect(() => {      
+        socket.on('stremio-check-info', handleStremioCheckInfo);
+
+        return () => {
+            socket.off('stremio-check-info', handleStremioCheckInfo);
+        };
+    }, [handleStremioCheckInfo, socket]);
+
+    const handleStremioCopying = useCallback((response: { hash: string, message: string }) => {
+        if (response.hash != metadata.id) return;
+        setSteps([response.message, ...steps]);
+        setWaiting(true);
+        setAlert('');
+    }, [metadata.id, steps, setWaiting]);
+
+    useEffect(() => {      
+        socket.on('stremio-copying', handleStremioCopying);
+
+        return () => {
+            socket.off('stremio-copying', handleStremioCopying);
+        };
+    }, [handleStremioCopying, socket]);
+
+    const handleStremioCopied = useCallback((response: { hash: string, message: string }) => {
+        if (response.hash != metadata.id) return;
+        setSteps(['File copied.', ...steps]);
+        setWaiting(false);
+        setAlert(response.message);
+        setAlertType('success');
+        setCopied(true);
+    }, [metadata.id, steps, setCopied, setWaiting]);
+
+    useEffect(() => {      
+        socket.on('stremio-copied', handleStremioCopied);
+
+        return () => {
+            socket.off('stremio-copied', handleStremioCopied);
+        };
+    }, [handleStremioCopied, socket]);
 
     return (
         <Modal

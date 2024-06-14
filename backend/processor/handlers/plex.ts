@@ -51,9 +51,7 @@ class Plex extends PlexClient {
             console.log('user connected to plex');
             
             socket.on('get-plex-libraries', async (data: {hash: string}) => {
-                try {
-                    console.log(data);
-                    
+                try {                    
                     this.io.emit('plex-libraries', { hash: data.hash, plexStoragePath: this.plexStoragePath });
                 } catch (err: any) {
                     console.log(err.message);
@@ -89,9 +87,7 @@ class Plex extends PlexClient {
     // copy stremio from prev dest to new dest
     private copy = async (hash: string, library: string) => {
         try {    
-            const saved = await this.db.get(hash);
-            let folderSavedInfo = JSON.parse(saved);
-    
+            const folderSavedInfo = await this.db.get(hash, true);    
             
             const name = folderSavedInfo['stremio']['stremioState']['title'];
             const dest = this.plexStoragePath?.find((lib) => lib.key === library)?.path || "";

@@ -75,8 +75,8 @@ class Stremio extends StremioClient {
             socket.on('stremio-copy', async (data: any) => {
                 try {
                     const folder = data.id;
-                    const content = await this.db.get(folder);
-                    const stremioState = JSON.parse(content).stremio.stremioState;
+                    const folderSavedInfo = await this.db.get(folder, true);
+                    const stremioState = folderSavedInfo.stremio.stremioState;
                     
                     const file = stremioState.name; // todo: check if this is correct
                     const dest = stremioState.title;
@@ -89,8 +89,7 @@ class Stremio extends StremioClient {
                         this.io.emit('stremio-error', { hash: folder, message: 'Error copying file.' });
                         return;
                     }
-                    const saved = await this.db.get(folder);
-                    let folderSavedInfo = JSON.parse(saved);
+                    
                     folderSavedInfo['stremio']['stremioCopied'] = true;
                     await this.db.save(folder, folderSavedInfo);
                     
@@ -251,8 +250,7 @@ class Stremio extends StremioClient {
             }
         }
         
-        const saved = await this.db.get(folder);
-        let savedInfo = JSON.parse(saved);
+        const savedInfo = await this.db.get(folder, true);
         if (savedInfo && savedInfo['stremio']) {
             savedInfo.stremio.stremioState = stremioState;
             savedInfo.stremio.stremioDownloaded = stremioState.downloaded;

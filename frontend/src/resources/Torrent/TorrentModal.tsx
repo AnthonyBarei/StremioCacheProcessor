@@ -3,13 +3,13 @@ import Box from '@mui/material/Box';
 import Modal from '@mui/material/Modal';
 import LinearWithValueLabel from '../Layouts/Linear';
 import { Alert, Button, Divider, Typography, Grid } from '@mui/material';
-import { socket } from '../../socket';
 import { GridColDef, GridRenderCellParams, GridRowId } from '@mui/x-data-grid';
 import DataTable from './TorrentDataTable';
 import { RowFile, TorrentFile, GridCellExpandProps } from '../../../../interfaces';
 import GridCellExpand from '../Layouts/GridCellExpand';
 import axios from 'axios';
 import { AlertColor } from '@mui/material/Alert';
+import { useSocket } from '../../providers/socketProvider';
 
 
 const style = {
@@ -56,112 +56,188 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
     const [hideDataTable, setHideDataTable] = React.useState<boolean>(false);
     const [alert, setAlert] = React.useState<string>('');
     const [alertType, setAlertType] = React.useState<string>('');
-    const [downloading, setDownloading] = React.useState<boolean>(false);
+    const [trackersAdded, setTrackersAdded] = React.useState<boolean>(false);
+
+    const { socket } = useSocket();
+
+    const handleTorrentAdded = React.useCallback((response: {hash: string, message: string}) => {
+        console.log(response, response.hash === hash);
+        
+        if (response.hash !== hash) return;
+        setAdded(true);
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(progress + 16.66);
+    }, [hash, progress, setAdded]);
 
     React.useEffect(() => {
-        socket.on('torrent-added', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setAdded(true);
-            setSteps(prev => [response.message, ...prev]);
-            setProgress(progress + 16.66);
-        });
-
-        socket.on('torrent-checking', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setProgress(progress + 1.51);
-        });
-
-        socket.on('torrent-started', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setProgress(33.32);
-        });
-
-        socket.on('torrent-trackers', (response: {hash: string, message: string}) => { // TODO: emit this event from the backend
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]); // 'Torrent trackers found'
-            setProgress(progress + 16.66);
-        });
-
-        socket.on('torrent-files', (response: {hash: string, files: TorrentFile[], message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-
-            const files = response.files.map((file: TorrentFile) => {                
-                return { id: file.index, name: file.name, availability: file.availability, priority: file.priority, progress: file.progress, size: file.size };
-            });
-            
-            setFiles(files);
-            setProgress(progress + 16.66);
-        });
-
-        socket.on('torrent-paused', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setProgress(100);
-        });
-
-        socket.on('torrent-resumed', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-        });
-
-        socket.on('torrent-file-priority', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setDownloading(true);
-        });
-
-        socket.on('torrent-trackers', (response: {hash: string, message: string}) => { // TODO: emit this event from the backend
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]); // 'Trackers added'
-        });
-
-        socket.on('torrent-status', (response: {hash: string, progress: number, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setProgress(response.progress * 100);
-        });
-
-        socket.on('torrent-error', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => ['Error: ' + response.message, ...prev]);
-            setAlert(response.message);
-            setAlertType('error');
-        });
-
-        socket.on('torrent-deleted', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setAdded(false);
-            setOpen(false);
-            setProgress(0);
-        });
-
-        socket.on('torrent-downloaded', (response: {hash: string, message: string}) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => [response.message, ...prev]);
-            setDownloaded(true);
-            setProgress(100);
-        });
+        socket.on('torrent-added', handleTorrentAdded);
 
         return () => {
-            socket.off('torrent-added');
-            socket.off('torrent-checking');
-            socket.off('torrent-started');
-            socket.off('torrent-trackers');
-            socket.off('torrent-files');
-            socket.off('torrent-paused');
-            socket.off('torrent-resumed');
-            socket.off('torrent-file-priority');
-            socket.off('torrent-trackers');
-            socket.off('torrent-status');
-            socket.off('torrent-error');
-            socket.off('torrent-deleted');
-            socket.off('torrent-downloaded');
+            socket.off('torrent-added', handleTorrentAdded);
         };
-    }, [hash, progress, setAdded, setDownloaded, setOpen]);
+    }, [handleTorrentAdded, socket]);
+
+    const handleTorrentChecking = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(progress + 1.51);
+    }, [hash, progress]);
+
+    React.useEffect(() => {
+        socket.on('torrent-checking', handleTorrentChecking);
+
+        return () => {
+            socket.off('torrent-checking', handleTorrentChecking);
+        };
+    }, [handleTorrentChecking, socket]);
+
+    const handleTorrentStarted = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(33.32);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-started', handleTorrentStarted);
+
+        return () => {
+            socket.off('torrent-started', handleTorrentStarted);
+        };
+    }, [handleTorrentStarted, socket]);
+
+    const handleTorrentTrackers = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(progress + 16.66);
+    }, [hash, progress]);
+
+    React.useEffect(() => {
+        socket.on('torrent-trackers', handleTorrentTrackers);
+
+        return () => {
+            socket.off('torrent-trackers', handleTorrentTrackers);
+        };
+    }, [handleTorrentTrackers, socket]);
+
+    const handleTorrentFiles = React.useCallback((response: {hash: string, files: TorrentFile[], message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+
+        const files = response.files.map((file: TorrentFile) => {                
+            return { id: file.index, name: file.name, availability: file.availability, priority: file.priority, progress: file.progress, size: file.size };
+        });
+        
+        setFiles(files);
+        setProgress(progress + 16.66);
+    }, [hash, progress]);
+
+    React.useEffect(() => {
+        socket.on('torrent-files', handleTorrentFiles);
+
+        return () => {
+            socket.off('torrent-files', handleTorrentFiles);
+        };
+    }, [handleTorrentFiles, socket]);
+
+    const handleTorrentPaused = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(100);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-paused', handleTorrentPaused);
+
+        return () => {
+            socket.off('torrent-paused', handleTorrentPaused);
+        };
+    }, [handleTorrentPaused, socket]);
+
+    const handleTorrentResumed = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-resumed', handleTorrentResumed);
+
+        return () => {
+            socket.off('torrent-resumed', handleTorrentResumed);
+        };
+    }, [handleTorrentResumed, socket]);
+
+    const handleTorrentFilePriority = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-file-priority', handleTorrentFilePriority);
+
+        return () => {
+            socket.off('torrent-file-priority', handleTorrentFilePriority);
+        };
+    }, [handleTorrentFilePriority, socket]);
+
+    const handleTorrentStatus = React.useCallback((response: {hash: string, progress: number, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setProgress(response.progress);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-status', handleTorrentStatus);
+
+        return () => {
+            socket.off('torrent-status', handleTorrentStatus);
+        };
+    }, [handleTorrentStatus, socket]);
+
+    const handleTorrentError = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Error: ' + response.message, ...prev]);
+        setAlert(response.message);
+        setAlertType('error');
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('torrent-error', handleTorrentError);
+
+        return () => {
+            socket.off('torrent-error', handleTorrentError);
+        };
+    }, [handleTorrentError, socket]);
+
+    const handleTorrentDeleted = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setAdded(false);
+        setOpen(false);
+        setProgress(0);
+    }, [hash, setAdded, setOpen, setProgress]);
+
+    React.useEffect(() => {
+        socket.on('torrent-deleted', handleTorrentDeleted);
+
+        return () => {
+            socket.off('torrent-deleted', handleTorrentDeleted);
+        };
+    }, [handleTorrentDeleted, socket]);
+
+    const handleTorrentDownloaded = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => [response.message, ...prev]);
+        setDownloaded(true);
+        setProgress(100);
+    }, [hash, setDownloaded]);
+
+    React.useEffect(() => {
+        socket.on('torrent-downloaded', handleTorrentDownloaded);
+
+        return () => {
+            socket.off('torrent-downloaded', handleTorrentDownloaded);
+        };
+    }, [handleTorrentDownloaded, socket]);
     
     const handleSelectedFiles = () => {
         console.log('dont click this');
@@ -175,7 +251,10 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
     const handleAddTrackers = () => {
         axios.post('http://localhost:3000/api/torrent/trackers', { hash }).then((response) => {
             console.log(response);
-            setSteps(prev => ['Trackers added', ...prev]);
+            setSteps(prev => ['Trackers added.', ...prev]);
+            setTrackersAdded(true);
+            setAlert('Trackers added.');
+            setAlertType('success');
         }).catch((error) => {
             console.error(error);
             setAlert('Error getting torrent trackers');
@@ -188,6 +267,9 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
     };
 
     const handleDelete = () => {
+        // confirm
+        const confirm = window.confirm('Are you sure you want to delete this torrent ?');
+        if (!confirm) return;
         socket.emit('torrent-delete', { hash });
     };
 
@@ -229,7 +311,7 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
                         <Grid item>
                             <Button variant="contained" onClick={handleDelete}>Delete</Button>
                         </Grid>
-                        {downloading && !downloaded && (
+                        {!trackersAdded && (
                             <Grid item>
                                 <Button variant="contained" onClick={handleAddTrackers}>Add trackers</Button>
                             </Grid>

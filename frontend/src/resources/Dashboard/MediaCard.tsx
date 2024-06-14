@@ -28,7 +28,6 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
   const [stremioCopied, setStremioCopied] = useState(metadata.stremio.stremioCopied);
   // Torrent
   const [torrentModalOpen, setTorrentModalOpen] = useState(false);
-  // const [torrentState, setTorrentState] = useState(metadata.qbittorrent.qbittorrentState);
   const [torrentAdded, setTorrentAdded] = useState(metadata.qbittorrent.qbittorrentAdded);
   const [torrentDownloaded, setTorrentDownloaded] = useState(metadata.qbittorrent.qbittorrentDownloaded);
   // Plex
@@ -125,21 +124,21 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </Tooltip>
             )}
 
-            {!torrentDownloaded && (
+            {/* {!torrentDownloaded && ( */}
               <Tooltip title="Download Torrent" placement="top">
                 <IconButton aria-label="Torrent Download" sx={{ borderRadius: '10%' }} onClick={handleTorrent}>
                   <img src={qbittorrentLogo} alt="qBittorrent" style={{width: '20px', height: '20px'}}/>
                 </IconButton>
               </Tooltip>
-            )}
+            {/* )} */}
 
-            {torrentDownloaded && (
+            {/* {torrentDownloaded && (
               <Tooltip title="watch" placement="top">
                 <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatch}>
                   <PlayCircleIcon color="success"/>
                 </IconButton>
               </Tooltip>
-            )}
+            )} */}
 
             <Tooltip title="Plex" placement="top">
               <IconButton aria-label="Plex" sx={{ borderRadius: '10%' }} onClick={handlePlex}>

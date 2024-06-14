@@ -13,6 +13,7 @@ import NotFound from './resources/Layouts/NotFound';
 import Configuration from './resources/Configuration';
 import PlexStoragePathCreate from './resources/Plex/PlexStoragePathCreate';
 import PlexStoragePathEdit from './resources/Plex/PlexStoragePathEdit';
+import { SocketProvider } from './providers/socketProvider';
 
 function App() {
     const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)') ? 'dark' : 'light';
@@ -27,20 +28,22 @@ function App() {
     }}), []);
 
     return (
-        <ColorModeContext.Provider value={colorMode}>
-            <ThemeProvider theme={theme}>
-                <Router>
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/configuration" element={<Configuration/>} />
-                        <Route path="/configuration/plex-storage-path" element={<PlexStoragePathCreate/>} />
-                        <Route path="/configuration/plex-storage-path/:id" element={<PlexStoragePathEdit/>} />
-                        {/* Add more routes as needed */}
-                        <Route path="*" element={<NotFound/>} />
-                    </Routes>
-                </Router>
-            </ThemeProvider>
-        </ColorModeContext.Provider>
+        <SocketProvider>
+            <ColorModeContext.Provider value={colorMode}>
+                <ThemeProvider theme={theme}>
+                    <Router>
+                        <Routes>
+                            <Route path="/" element={<Home />} />
+                            <Route path="/configuration" element={<Configuration/>} />
+                            <Route path="/configuration/plex-storage-path" element={<PlexStoragePathCreate/>} />
+                            <Route path="/configuration/plex-storage-path/:id" element={<PlexStoragePathEdit/>} />
+                            {/* Add more routes as needed */}
+                            <Route path="*" element={<NotFound/>} />
+                        </Routes>
+                    </Router>
+                </ThemeProvider>
+            </ColorModeContext.Provider>
+        </SocketProvider>
     );
 }
 

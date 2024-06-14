@@ -34,6 +34,23 @@ class qBittorrent extends qBittorrentClient {
         this.app.get('/api/torrent/status', this.getTorrentStatus);
         this.app.post('/api/torrent/trackers', this.AddTorrentTrackers);
 
+
+
+
+        this.app.get('/api/torrent/watch', async (req: any, res: any) => {
+            const hash = req.query.hash;
+            if (!hash) return res.status(400).send({ error: 'Missing hash parameter' });
+            const info = await this.db.get(hash, true);
+            if (info && info.qbittorrent && info.qbittorrent.qbittorrentMediaPath) {
+                res.status(200).send({ info: info.qbittorrent });
+            } else {
+                res.status(404).send({ error: 'Torrent path not found.' });
+            }
+        });
+
+
+
+
         this.io.on('connection', (socket: any) => {
             console.log('user connected on qbittorrent');
 
@@ -115,7 +132,9 @@ class qBittorrent extends qBittorrentClient {
             // api add torrent
             await this.AddTorrentApi(magnet, category);
             this.io.emit('torrent-added', { hash, message: 'Torrent added.'});
-            await this.updateDBTorrentStateAdded(hash, true);
+            await this.updateDBTorrentState(hash, {
+                qbittorrentAdded: true,
+            });
 
             await this.resumeTorrentApi(hash);
 
@@ -140,14 +159,15 @@ class qBittorrent extends qBittorrentClient {
     private getTorrentInfo = async (category: string, hash: string) => {
         const magnet = 'magnet:?xt=urn:btih:' + hash;
         let torrentInfo: any;
-
+        console.log(`Checking torrent ${hash}`);
+        
         // Wait and check if torrent has started
         for (let attempt = 0; attempt < 12; attempt++) {
             this.io.emit('torrent-checking', { hash, message: `Torrent checking attempt ${attempt} of 11`});
             await new Promise(resolve => setTimeout(resolve, 5000));
 
             try {
-                const infoResponse = await this.getTorrentInfoApi(category);                   
+                const infoResponse = await this.getTorrentInfoApi(category, hash);                   
                 torrentInfo = infoResponse.find((torrent: any) => torrent.magnet_uri.includes(magnet));
             } catch (error) {
                 console.error(`Error fetching torrent info: ${error}`);
@@ -193,9 +213,14 @@ class qBittorrent extends qBittorrentClient {
 
             // wait for file to be downloaded
             const downloaded = await this.waitFileDownloaded(hash);
+            console.log(downloaded);
+            
 
-            if (downloaded) {
-                await this.updateDBTorrentStateDownloaded(hash, downloaded);
+            if (downloaded.progress === 1) {
+                await this.updateDBTorrentState(hash, {
+                    qbittorrentDownloaded: true,
+                    qbittorrentMediaPath: downloaded.content_path,
+                });
                 this.io.emit('torrent-downloaded', { hash, message: 'Torrent downloaded.'});
             }
         } catch (error: any) {
@@ -217,11 +242,11 @@ class qBittorrent extends qBittorrentClient {
     };
 
     private waitFileDownloaded = async (hash: string) => {
-        let fileDownloaded = false;
+        let status: any;
 
-        while (!fileDownloaded) {
+        while (true) {
             const torrentStatus = await this.getTorrentInfoApi('movies', hash);
-            const status = torrentStatus[0];
+            status = torrentStatus[0];
             
             this.io.emit('torrent-status', { 
                 hash, progress: 
@@ -230,7 +255,6 @@ class qBittorrent extends qBittorrentClient {
             });
 
             if (status.state === 'uploading' || status.state === 'seeding' || status.amount_left === 0 || status.progress === 1) {
-                fileDownloaded = true;
                 this.addedTorrents.delete(hash);
                 break;
             }
@@ -238,7 +262,7 @@ class qBittorrent extends qBittorrentClient {
             await new Promise(resolve => setTimeout(resolve, 30000));
         }
 
-        return fileDownloaded;
+        return status;
     };
 
     private AddTorrentTrackers = async (req: any, res: any) => {
@@ -280,7 +304,11 @@ class qBittorrent extends qBittorrentClient {
     private deleteTorrent = async (hash: string) => {
         try {
             await this.deleteTorrentApi(hash, true);
-            await this.updateDBTorrentStateAdded(hash, false);
+            await this.updateDBTorrentState(hash, {
+                qbittorrentAdded: false,
+                qbittorrentDownloaded: false,
+                qbittorrentMediaPath: null,
+            });
             this.io.emit('torrent-deleted', { hash, message: 'Torrent deleted.' });
         } catch (error: any) {
             this.io.emit('torrent-error', { hash, message: error.message });
@@ -289,20 +317,12 @@ class qBittorrent extends qBittorrentClient {
         }
     };
 
-    private updateDBTorrentStateAdded = async (hash: string, state: boolean) => {
-        const saved = await this.db.get(hash);
-        const savedInfo = JSON.parse(saved);
+    private updateDBTorrentState = async (hash: string, toUpdate: any) => {
+        const savedInfo = await this.db.get(hash, true);
         if (savedInfo && savedInfo.qbittorrent) {
-            savedInfo.qbittorrent.qbittorrentAdded = state;
-        }
-        await this.db.save(hash, savedInfo);
-    };
-
-    private updateDBTorrentStateDownloaded = async (hash: string, state: boolean) => {
-        const saved = await this.db.get(hash);
-        const savedInfo = JSON.parse(saved);
-        if (savedInfo && savedInfo.qbittorrent) {
-            savedInfo.qbittorrent.qbittorrentDownloaded = state;
+            for (const key in toUpdate) {
+                savedInfo.qbittorrent[key] = toUpdate[key];
+            }
         }
         await this.db.save(hash, savedInfo);
     };

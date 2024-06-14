@@ -229,8 +229,7 @@ class Processor {
                 res.status(500).send({ message: 'Unable to copy folder' });
                 return;
             }
-            const saved = await this.db.get(folder);
-            let folderSavedInfo = JSON.parse(saved);
+            const folderSavedInfo = await this.db.get(folder, true);
             folderSavedInfo['stremio']['stremioCopied'] = true;
             await this.db.save(folder, folderSavedInfo);
             res.send({ message: 'Folder copied' });
@@ -269,8 +268,7 @@ class Processor {
             return;
         }
 
-        const processed = await this.db.get(folder);
-        const folderSavedInfo = JSON.parse(processed);
+        const folderSavedInfo = await this.db.get(folder, true);
 
         if (folderSavedInfo && folderSavedInfo['processed'] === true) {
             console.log(`Folder ${folder} has already been processed`);
@@ -305,10 +303,9 @@ class Processor {
                     'stremioCopied': false
                 }, 
                 'qbittorrent': {
-                    'qbittorrentState': null,
                     'qbittorrentAdded': false,
                     'qbittorrentDownloaded': false,
-                    'qbittorrentCopied': false,
+                    'qbittorrentMediaPath': null,
                 },
                 'plex': {
                     'plexCopied': false,

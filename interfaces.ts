@@ -61,8 +61,7 @@ interface StremioFolderProcess {
 interface qBittorrentStateFolderProcess {
     qbittorrentAdded: boolean;
     qbittorrentDownloaded: boolean;
-    qbittorrentCopied: boolean;
-    qbittorrentState: null;
+    qbittorrentMediaPath: null;
 }
 
 interface FolderProcess {
@@ -180,9 +179,9 @@ interface Library {
 
 interface RowLibrary {
     id: number;
-    location: string;
+    path: string;
+    plexPath: string;
     title: string;
-    agent: string;
 }
 
 interface ConfigurationLibrary {
@@ -190,6 +189,23 @@ interface ConfigurationLibrary {
     path: string;
     plexPath: string;
     title: string;
+}
+
+interface HashMessageResponse { 
+    hash: string;
+    message: string;
+}
+
+interface TorrentFilesResponse {
+    hash: string;
+    files: TorrentFile[];
+    message: string;
+}
+
+interface TorrentStatusResponse {
+    hash: string;
+    progress: number;
+    message: string;
 }
 
 export type { 
@@ -203,4 +219,7 @@ export type {
     Library,
     RowLibrary,
     ConfigurationLibrary,
+    HashMessageResponse,
+    TorrentFilesResponse,
+    TorrentStatusResponse,
 };

@@ -3,12 +3,12 @@ import Box from '@mui/material/Box';
 import Modal from '@mui/material/Modal';
 import LinearWithValueLabel from '../Layouts/Linear';
 import { Alert, Button, Divider, Typography } from '@mui/material';
-import { socket } from '../../socket';
 import { AlertColor } from '@mui/material/Alert';
 import { GridColDef, GridRowId } from '@mui/x-data-grid';
 
 import { ConfigurationLibrary, RowLibrary } from '../../../../interfaces';
 import PlexDataTable from './PlexDataTable';
+import { useSocket } from '../../providers/socketProvider';
 
 
 const style = {
@@ -40,18 +40,31 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
     const [selectedLibraries, setSelectedLibraries] = React.useState<GridRowId[]>([]);
     const [hideDataTable, setHideDataTable] = React.useState<boolean>(false);
 
-    React.useEffect(() => {
-        socket.on('plex-libraries', (response) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => ['Plex libraries updated.', ...prev]);
+    const { socket } = useSocket();
 
-            const libraries = response.plexStoragePath.map((library: ConfigurationLibrary) => {                
-                return { id: library.key, plexpath: library.plexPath, localpath: library.path, title: library.title};
-            });
-            
-            setLibraries(libraries);
-            setProgress(progress + 100/3);
+    const handlePlexLibraries = React.useCallback((response: {hash: string, plexStoragePath: ConfigurationLibrary[]}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Plex libraries updated.', ...prev]);
+
+        const libraries = response.plexStoragePath.map((library: ConfigurationLibrary) => {                
+            return { id: library.key, plexpath: library.plexPath, localpath: library.path, title: library.title } as unknown as RowLibrary;
         });
+        
+        setLibraries(libraries);
+        setProgress(progress + 100/3);
+    }, [hash, progress]);
+
+    React.useEffect(() => {
+        socket.on('plex-libraries', handlePlexLibraries);
+
+        return () => {
+            socket.off('plex-libraries', handlePlexLibraries);
+        };
+    }, [handlePlexLibraries, socket]);
+
+    // TODO !!!
+
+    React.useEffect(() => {
 
         socket.on('plex-copied', (response) => {
             if (response.hash !== hash) return;

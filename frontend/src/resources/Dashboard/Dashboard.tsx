@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios'; 
-import { socket } from '../../socket';
 
 import { Box, Button, Typography } from '@mui/material';
 import MainLayout from '../Layouts/Main';
@@ -8,31 +7,29 @@ import MovieCard from './MediaCard';
 
 import { FolderProcess } from '../../../../interfaces';
 import Loading from '../Layouts/Loading';
+import { useSocket } from '../../providers/socketProvider';
 
 const Dashboard = () => {
   const [data, setData] = useState<FolderProcess[]>([]);
+  const { socket } = useSocket()
 
-  useEffect(() => {
-    fetchData();
-  }, []); // Empty dependency array means this effect runs once on mount
-  
-  useEffect(() => {    
-    socket.on('meta', (response: FolderProcess) => {
-      setData(prevData => {
-          // Check if response already exists in data
-          const exists = prevData.some(item => item.id === response.id);
-          // If it doesn't exist, add it to data
-          if (!exists) return [response, ...prevData];
-          // If it does exist, return the previous data without modification
-          return prevData;
-      });
+  const handleMeta = useCallback((response: FolderProcess) => {
+    setData(prevData => {
+        const exists = prevData.some(item => item.id === response.id);
+        if (!exists) return [response, ...prevData];
+        return prevData;
     });
+  }, []);
+  
+  useEffect(() => {     
+    socket.on('meta', handleMeta);
 
     return () => {
-      socket.off('meta');
+      socket.off('meta', handleMeta);
     };
-  }, []); // Empty dependency array means this effect runs once on mount and clean up on unmount
+  }, [handleMeta, socket]);
 
+  useEffect(() => { fetchData(); }, [socket]);
 
   const fetchData = async () => {
     try {
