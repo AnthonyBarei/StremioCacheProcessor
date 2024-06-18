@@ -50,7 +50,7 @@ const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, dow
                 </>
             )}
 
-            {!downloaded && (
+            {!downloaded && !waiting && (
                 <>
                     {!stremioState.downloading && (
                         <>

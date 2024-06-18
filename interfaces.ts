@@ -62,6 +62,8 @@ interface qBittorrentStateFolderProcess {
     qbittorrentAdded: boolean;
     qbittorrentDownloaded: boolean;
     qbittorrentMediaPath: null;
+    qbittorrentProgress: number;
+    qbittorrentDownloading: boolean;
 }
 
 interface FolderProcess {
@@ -180,6 +182,7 @@ interface Library {
 interface RowLibrary {
     id: number;
     path: string;
+    localpath?: string;
     plexPath: string;
     title: string;
 }
@@ -208,6 +211,11 @@ interface TorrentStatusResponse {
     message: string;
 }
 
+interface Folder {
+    name: string;
+    subfolders: Folder[];
+};
+
 export type { 
     Movie,
     FolderProcess,
@@ -216,10 +224,12 @@ export type {
     RowFile,
     TorrentInfo,
     StremioStateFolderProcess,
+    qBittorrentStateFolderProcess,
     Library,
     RowLibrary,
     ConfigurationLibrary,
     HashMessageResponse,
     TorrentFilesResponse,
     TorrentStatusResponse,
+    Folder,
 };

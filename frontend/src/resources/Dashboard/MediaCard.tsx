@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { socket } from '../../socket';
 
 import { Box, Card, CardContent, CardMedia, IconButton, Tooltip, Typography } from "@mui/material";
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
@@ -16,36 +15,82 @@ import qbittorrentLogo from '../../assets/qbittorrent.svg';
 import plexLogo from '../../assets/plex.svg';
 import StremioModal from "../Stremio/StremioModal";
 import TorrentModal from "../Torrent/TorrentModal";
+import TorrentState from "../Torrent/TorrentState";
+import MoreInfoMenu from "./MoreInfoMenu";
 
 
 const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeItem: (id: string) => void}) => {  
   const title = metadata.stremio.stremioState.title || metadata.meta.name;
   // Stremio
   const [stremioModalOpen, setStremioModalOpen] = useState(false);
-  const [stremioState, setStremioState] = useState<StremioStateFolderProcess>(metadata.stremio.stremioState);
+  const [stremioState, setStremioState] = useState<StremioStateFolderProcess>({
+    name: '',
+    downloaded: false,
+    downloadSize: 0,
+    downloadSpeed: 0,
+    remainingTime: null,
+    progress: 0,
+    size: 0,
+    downloading: false,
+    title: title,
+  });
   const [stremioWaiting, setStremioWaiting] = useState(false);
-  const [stremioDownloaded, setStremioDownloaded] = useState(metadata.stremio.stremioDownloaded);
-  const [stremioCopied, setStremioCopied] = useState(metadata.stremio.stremioCopied);
+  const [stremioDownloaded, setStremioDownloaded] = useState(false);
+  const [stremioCopied, setStremioCopied] = useState(false);
   // Torrent
   const [torrentModalOpen, setTorrentModalOpen] = useState(false);
-  const [torrentAdded, setTorrentAdded] = useState(metadata.qbittorrent.qbittorrentAdded);
-  const [torrentDownloaded, setTorrentDownloaded] = useState(metadata.qbittorrent.qbittorrentDownloaded);
+  const [torrentAdded, setTorrentAdded] = useState(false);
+  const [torrentWaiting, setTorrentWaiting] = useState(false);
+  const [torrentProgress, setTorrentProgress] = useState(0);
+  const [torrentDownloading, setTorrentDownloading] = useState(false);
+  const [torrentDownloaded, setTorrentDownloaded] = useState(false);
   // Plex
   const [plexModalOpen, setPlexModalOpen] = useState(false);
   // Delete
-  const [deleteError, setDeleteError] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);  
+  
+  const [selectedDownloadMethod, setSelectedDownloadMethod] = useState<string>('stremio');
 
+  useEffect(() => {
+    setStremioState(metadata.stremio.stremioState);
+    setStremioWaiting(metadata.stremio.stremioState.downloading);
+    setStremioDownloaded(metadata.stremio.stremioDownloaded);
+    setStremioCopied(metadata.stremio.stremioCopied);
+    
+    setTorrentAdded(metadata.qbittorrent.qbittorrentAdded);
+    setTorrentProgress(metadata.qbittorrent.qbittorrentProgress);
+    setTorrentDownloading(metadata.qbittorrent.qbittorrentDownloading);
+    setTorrentDownloaded(metadata.qbittorrent.qbittorrentDownloaded);
 
-  const handleTorrent = () => {
-    if (!torrentDownloaded) {
-      socket.emit('torrent-add', { hash: metadata.id });
-      console.log('Torrent added');
+    if (metadata.qbittorrent.qbittorrentAdded || metadata.qbittorrent.qbittorrentDownloading || metadata.qbittorrent.qbittorrentDownloaded) {
+      setSelectedDownloadMethod('torrent');
+    } else {
+      setSelectedDownloadMethod('stremio'); // default value
     }
-    setTorrentModalOpen(true);
+  }, [metadata]);
+  
+  const handleStremio = () => {
+    socket.emit('stremio-metacheck', { id: metadata.id, meta: metadata.meta });
+    setStremioModalOpen(true);
+    setSelectedDownloadMethod('stremio');
   };
 
-  const handleMoreInfo = () => {
-    console.log('More Info clicked');
+  const handleTorrent = () => {    
+    if (!torrentAdded) {
+        socket.emit('torrent-add', { hash: metadata.id });
+        setTorrentWaiting(true);
+    } else {
+      if (!torrentDownloading) {                
+        socket.emit('torrent-debug', { hash: metadata.id });
+        setTorrentWaiting(true);
+      }
+    }
+    setTorrentModalOpen(true);
+    setSelectedDownloadMethod('torrent');
+  };
+
+  const handlePlex = () => {
+    setPlexModalOpen(true);
   };
 
   const handleDelete = () => {
@@ -57,7 +102,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
       setDeleteError(true);
     });
   };
-
+  
   const handleWatch = () => {
     axios.get(`http://localhost:3000/api/watch?folder=${metadata.id}&title=${title}`).then(() => {
       console.log('Video Started');
@@ -66,15 +111,14 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
     });
   };
 
-  const handlePlex = () => {
-    socket.emit('get-plex-libraries', { hash: metadata.id });
-    setPlexModalOpen(true);
+  const handleWatchTorrent = () => {
+    axios.get(`http://localhost:3000/api/torrent/watch?hash=${metadata.id}`).then(() => {
+      console.log('Video Started');
+    }).catch((err) => {
+      console.error(err);
+    });
   };
 
-  const handleStremio = () => {
-    socket.emit('stremio-metacheck', { id: metadata.id, meta: metadata.meta });
-    setStremioModalOpen(true);
-  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', }}>
@@ -124,21 +168,21 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </Tooltip>
             )}
 
-            {/* {!torrentDownloaded && ( */}
+            {!torrentDownloaded && (
               <Tooltip title="Download Torrent" placement="top">
                 <IconButton aria-label="Torrent Download" sx={{ borderRadius: '10%' }} onClick={handleTorrent}>
                   <img src={qbittorrentLogo} alt="qBittorrent" style={{width: '20px', height: '20px'}}/>
                 </IconButton>
               </Tooltip>
-            {/* )} */}
+            )}
 
-            {/* {torrentDownloaded && (
+            {torrentDownloaded && (
               <Tooltip title="watch" placement="top">
-                <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatch}>
+                <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatchTorrent}>
                   <PlayCircleIcon color="success"/>
                 </IconButton>
               </Tooltip>
-            )} */}
+            )}
 
             <Tooltip title="Plex" placement="top">
               <IconButton aria-label="Plex" sx={{ borderRadius: '10%' }} onClick={handlePlex}>
@@ -153,21 +197,33 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
             </Tooltip>
 
             <Tooltip title="More Info" placement="top">
-              <IconButton aria-label="More Info" sx={{ borderRadius: '10%' }} onClick={handleMoreInfo}>
-                <ExpandMoreIcon />
-              </IconButton>
+              <MoreInfoMenu/>
             </Tooltip>
 
             <Typography variant="body2" color="text.secondary" sx={{mt: 2, mb: 2}}>{metadata.meta.description}</Typography>
 
-            <StremioState 
-              metadata={metadata} 
-              stremioState={stremioState} 
-              waiting={stremioWaiting} 
-              setWaiting={setStremioWaiting} 
-              copied={stremioCopied} 
-              downloaded={stremioDownloaded}
-            />
+            {selectedDownloadMethod === 'stremio' && (
+              <StremioState 
+                metadata={metadata} 
+                stremioState={stremioState} 
+                waiting={stremioWaiting} 
+                setWaiting={setStremioWaiting} 
+                copied={stremioCopied} 
+                downloaded={stremioDownloaded}
+              />
+            )}
+
+            {selectedDownloadMethod === 'torrent' && (
+              <TorrentState 
+                hash={metadata.id} 
+                progress={torrentProgress} 
+                downloading={torrentDownloading}
+                added={torrentAdded} 
+                waiting={torrentWaiting} 
+                setWaiting={setTorrentWaiting} 
+                downloaded={torrentDownloaded} 
+              />  
+            )}
 
           </CardContent>
         </Box>
@@ -187,6 +243,12 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
         setOpen={setTorrentModalOpen} 
         added={torrentAdded} 
         setAdded={setTorrentAdded}
+        waiting={torrentWaiting}
+        setWaiting={setTorrentWaiting}
+        progress={torrentProgress}
+        setProgress={setTorrentProgress}
+        downloading={torrentDownloading}
+        setDownloading={setTorrentDownloading}
         downloaded={torrentDownloaded}
         setDownloaded={setTorrentDownloaded}
       />

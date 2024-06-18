@@ -14,6 +14,8 @@ const Dashboard = () => {
   const { socket } = useSocket()
 
   const handleMeta = useCallback((response: FolderProcess) => {
+    console.log(response);
+    
     setData(prevData => {
         const exists = prevData.some(item => item.id === response.id);
         if (!exists) return [response, ...prevData];

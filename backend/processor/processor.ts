@@ -3,10 +3,11 @@ import { Server } from "socket.io";
 import Database from "../db";
 
 import FileSystem from "./handlers/filesystem";
-import Stremio from "./handlers/stremio";
-import qBittorrent from "./handlers/qbittorrent";
+import Stremio from "./handlers/stremio/stremio";
+import qBittorrent from "./handlers/qbittorrent/qbittorrent";
 import axios from "axios";
-import Plex from "./handlers/plex";
+import Plex from "./handlers/plex/plex";
+import Configuration from "./handlers/configuration";
 
 class Processor {
     private db: Database;
@@ -14,6 +15,7 @@ class Processor {
     private app: Express;
     private config: any;
 
+    private Configuration: Configuration;
     private FileSystem: FileSystem;
     private Stremio: Stremio;
     private qBittorrent: qBittorrent;
@@ -25,41 +27,18 @@ class Processor {
         this.app = app;
         this.config = config;
 
-        this.FileSystem = new FileSystem(this.config.stremio.stremioCachePath, this.config.user.userSaveFolder, this.config.plex.plexStoragePath);
+        this.Configuration = new Configuration(this.config, this.app, this.db);
+        this.Configuration.buildEndpoints();
 
-        this.Stremio = new Stremio(
-            this.config.stremio.stremioAppPath,
-            this.config.stremio.stremioAppHost, 
-            this.config.stremio.stremioCachePath, 
-            this.config.stremio.checkTimeout,
-            this.config.stremio.checkRetries,
-            this.FileSystem,
-            this.app,
-            this.io,
-            this.db,
-        );
+        this.FileSystem = new FileSystem(this.Configuration);
+
+        this.Stremio = new Stremio(this.Configuration, this.FileSystem, this.app, this.io, this.db);
         this.Stremio.buildEndpoints();
 
-        this.qBittorrent = new qBittorrent(
-            this.config.qbittorrent.qBittorrentAppHost, 
-            this.config.qbittorrent.qbittorrentApi, 
-            this.config.qbittorrent.qbittorrentCredentials, 
-            this.app,
-            this.io,
-            this.db,
-        );
+        this.qBittorrent = new qBittorrent(this.Configuration, this.FileSystem, this.app, this.io, this.db);
         this.qBittorrent.buildEndpoints();
 
-        this.Plex = new Plex(
-            this.config.plex.plexAppHost,
-            this.config.plex.plexStoragePath,
-            this.config.plex.plexToken,
-            this.config.plex.plexMetadataCommand,
-            this.app,
-            this.db,
-            this.io,
-            this.FileSystem,
-        );
+        this.Plex = new Plex(this.Configuration, this.FileSystem, this.app, this.io, this.db);
         this.Plex.buildEndpoints();
 
         this.buildEndpoints();
@@ -83,116 +62,6 @@ class Processor {
             }
 
             res.send({ success: true });
-        });
-
-        this.app.get('/api/configuration', (req, res) => {
-            res.send({ 
-                stremioCachePath: this.config.stremio.stremioCachePath, 
-                stremioAppHost: this.config.stremio.stremioAppHost,
-                qbittorrentAppHost: this.config.qbittorrent.qBittorrentAppHost,
-                vpnAppPath: '',
-                userSaveFolder: this.config.user.userSaveFolder,
-                stremioCheckTimeout: this.config.stremio.checkTimeout,
-                stremioCheckRetries: this.config.stremio.checkRetries,
-                plexAppHost: this.config.plex.plexAppHost,
-                plexStorageHost: this.config.plex.plexStorageHost,
-                plexStoragePath: this.config.plex.plexStoragePath,
-            });
-        });
-
-        this.app.post('/api/configuration', async (req, res) => {
-            const { stremioCachePath, stremioAppHost, qbittorrentAppHost, userSaveFolder, stremioCheckTimeout, stremioCheckRetries } = req.body;
-            this.config.stremio.stremioCachePath = stremioCachePath;
-            this.config.stremio.stremioAppHost = stremioAppHost;
-            this.config.qbittorrent.qBittorrentAppHost = qbittorrentAppHost;
-            this.config.user.userSaveFolder = userSaveFolder;
-            this.config.stremio.checkTimeout = stremioCheckTimeout;
-            this.config.stremio.checkRetries = stremioCheckRetries;
-            this.FileSystem.updateConfig(stremioCachePath, userSaveFolder);
-            this.Stremio.updateConfig(stremioAppHost, stremioCachePath, stremioCheckTimeout, stremioCheckRetries, this.FileSystem);
-            this.qBittorrent.updateConfig(qbittorrentAppHost);
-            await this.db.save('config', this.config);
-            res.send({ message: 'Configuration saved' });
-        });
-
-        this.app.get('/api/configuration/storage-path', (req, res) => {
-            res.send({ storagePath: this.config.plex.plexStoragePath });
-        });
-
-        this.app.get('/api/configuration/storage-path/:id', (req, res) => {
-            const id = Number(req.params.id);
-            
-            if (id === undefined || isNaN(id)) {
-                res.status(400).send({ message: 'Id is required' });
-                return;
-            } 
-
-            if (!this.config.plex.plexStoragePath[id]) {
-                res.status(404).send({ message: 'Storage path not found' });
-                return;
-            }
-
-            res.send({ storagePath: this.config.plex.plexStoragePath[id] });
-        });
-
-
-        this.app.post('/api/configuration/storage-path', async (req, res) => {
-            const { key, path, plexPath, title } = req.body;
-
-            if (!path) {
-                res.status(400).send({ message: 'Path is required' });
-                return;
-            }
-
-            if (!plexPath) {
-                res.status(400).send({ message: 'Plex storage path is required' });
-                return;
-            }
-
-            this.config.plex.plexStoragePath.push({ key, path, plexPath, title });
-            this.Plex.updateConfig(this.config.plex.plexAppHost, this.config.plex.plexStoragePath);
-            this.config.plex.plexPath = this.config.plex.plexStoragePath;
-            await this.db.save('config', this.config);
-            res.send({ message: 'Storage path saved' });
-        });
-
-        this.app.put('/api/configuration/storage-path', async (req, res) => {
-            const { id, key, path, plexPath, title } = req.body;
-
-            if (!path) {
-                res.status(400).send({ message: 'Path is required' });
-                return;
-            }
-
-            if (!plexPath) {
-                res.status(400).send({ message: 'Plex storage path is required' });
-                return;
-            }
-
-            this.config.plex.plexStoragePath[id] = { key, path, plexPath, title };
-            this.Plex.updateConfig(this.config.plex.plexAppHost, this.config.plex.plexStoragePath);
-            this.config.plex.plexPath = this.config.plex.plexStoragePath;
-            await this.db.save('config', this.config);
-            res.send({ message: 'Storage path saved' });
-        });
-
-        this.app.delete('/api/configuration/storage-path/:id', async (req, res) => {
-            const id = Number(req.params.id);
-
-            if (id === undefined || isNaN(id)) {
-                res.status(400).send({ message: 'Id is required' });
-                return;
-            } 
-
-            if (!this.config.plex.plexStoragePath[id]) {
-                res.status(404).send({ message: 'Storage path not found' });
-                return;
-            }
-
-            this.config.plex.plexStoragePath.splice(id, 1);
-            this.Plex.updateConfig(this.config.plex.plexAppHost, this.config.plex.plexStoragePath);
-            await this.db.save('config', this.config);
-            res.send({ message: 'Storage path deleted' });
         });
 
         this.app.get('/api/connection-safe', async (req, res) => {
@@ -305,6 +174,8 @@ class Processor {
                 'qbittorrent': {
                     'qbittorrentAdded': false,
                     'qbittorrentDownloaded': false,
+                    'qbittorrentDownloading': false,
+                    'qbittorrentProgress': 0,
                     'qbittorrentMediaPath': null,
                 },
                 'plex': {
@@ -317,7 +188,8 @@ class Processor {
             // send meta to client with id
             this.io.emit('meta', { id: folder, ...metadata });
         } catch (error: any) {
-            throw new Error(error.message);
+            // throw new Error(error.message);
+            console.log(error.message);
         }
 
         return;
@@ -331,7 +203,7 @@ class Processor {
                 },
             });
             
-            if (response.data.isp === 'NordVPN') {
+            if (response.data.isp === 'NordVPN' || response.data.isp === 'Hydra Communications') {
                 console.log('NordVPN is connected');
                 return true;
             } else {

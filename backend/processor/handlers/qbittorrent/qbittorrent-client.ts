@@ -2,26 +2,23 @@ import axios from 'axios';
 import { wrapper } from 'axios-cookiejar-support';
 import { CookieJar } from 'tough-cookie';
 import FormData from 'form-data';
+import Configuration from '../configuration';
 
 class qBittorrentClient {
-    protected qBittorrentAppHost: string;
-    private qbittorrentApi: string;
-    private qbittorrentCredentials: string;
     private axiosInstance: any;
+    protected Configuration: Configuration;
     protected connected: boolean = false;
     
-    constructor(qBittorrentAppHost: string, qbittorrentApi: string, qbittorrentCredentials: string) {
-        this.qBittorrentAppHost = qBittorrentAppHost;
-        this.qbittorrentApi = qbittorrentApi;
-        this.qbittorrentCredentials = qbittorrentCredentials;
+    constructor(Configuration: Configuration) {
+        this.Configuration = Configuration;
         const jar = new CookieJar();
         this.axiosInstance = wrapper(axios.create({ jar, withCredentials: true}));
     }
 
     protected connection(): void {      
-        this.axiosInstance.post(this.qbittorrentApi + '/auth/login', this.qbittorrentCredentials, {
+        this.axiosInstance.post(this.Configuration.config.qbittorrent.qbittorrentApi + '/auth/login', this.Configuration.config.qbittorrent.qbittorrentCredentials, {
             headers: {
-                'Referer': this.qBittorrentAppHost,
+                'Referer': this.Configuration.config.qbittorrent.qBittorrentAppHost,
                 'Content-Type': 'application/x-www-form-urlencoded'
             }
         }).then((response: any) => {            
@@ -35,13 +32,13 @@ class qBittorrentClient {
 
     protected getTorrentFilesApi = async (hash: string) => {
         try {
-            const response = await this.axiosInstance.get(`${this.qbittorrentApi}/torrents/files?hash=${hash}`, {
+            const response = await this.axiosInstance.get(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/files?hash=${hash}`, {
                 params: {
                     hash: hash
                 },
                 headers: {
                     'Accept': 'application/json',
-                    'Referer': this.qBittorrentAppHost,
+                    'Referer': this.Configuration.config.qbittorrent.qBittorrentAppHost,
                 }
             });
 
@@ -61,7 +58,7 @@ class qBittorrentClient {
             form.append('paused', 'false');
             form.append('root_folder', 'true');
             
-            const response = this.axiosInstance.post(`${this.qbittorrentApi}/torrents/add`, form, {
+            const response = this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/add`, form, {
                 headers: form.getHeaders()
             });
 
@@ -73,7 +70,7 @@ class qBittorrentClient {
 
     protected getTorrentInfoApi = async (category: string, hashes: string = '') => {
         try {
-            const response = await this.axiosInstance.get(`${this.qbittorrentApi}/torrents/info?filtering=downloading&category=${category}`+ (hashes ? `&hashes=${hashes}` : ''));                    
+            const response = await this.axiosInstance.get(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/info?filtering=downloading&category=${category}`+ (hashes ? `&hashes=${hashes}` : ''));                    
             return response.data;
         } catch (error: any) {
             throw new Error(error);
@@ -84,7 +81,7 @@ class qBittorrentClient {
         console.log(hash);
         
         try {            
-            const response = await this.axiosInstance.get(`${this.qbittorrentApi}/torrents/trackers?hash=${hash}`); // todo : verify
+            const response = await this.axiosInstance.get(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/trackers?hash=${hash}`); // todo : verify
             return response.data;
         } catch (error: any) {
             throw new Error(error);
@@ -95,7 +92,7 @@ class qBittorrentClient {
         try {
             const data = new URLSearchParams();
             data.append('hashes', hash);
-            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/pause`, data);
+            const response = await this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/pause`, data);
             
             return response.data;
         } catch (error: any) {            
@@ -107,7 +104,7 @@ class qBittorrentClient {
         try {
             const data = new URLSearchParams();
             data.append('hashes', hash);
-            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/resume`, data);
+            const response = await this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/resume`, data);
             
             return response;
         } catch (error: any) {
@@ -121,7 +118,7 @@ class qBittorrentClient {
             data.append('hash', hash);
             data.append('id', fileIndices.join('|'));
             data.append('priority', priority.toString());
-            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/filePrio`, data);
+            const response = await this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/filePrio`, data);
 
             return response;
         } catch (error: any) {
@@ -131,7 +128,7 @@ class qBittorrentClient {
 
     protected getTorrentPropertiesApi = async (hash: string) => {
         try {
-            const response = await this.axiosInstance.get(`${this.qbittorrentApi}/torrents/properties?hash=${hash}`);
+            const response = await this.axiosInstance.get(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/properties?hash=${hash}`);
 
             return response.data;
         } catch (error: any) {
@@ -144,7 +141,7 @@ class qBittorrentClient {
             const data = new URLSearchParams();
             data.append('hash', hash);
             data.append('urls', trackers.join('\n'));
-            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/addTrackers`, data);
+            const response = await this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/addTrackers`, data);
             return response.data;
         } catch (error: any) {
             throw new Error(error);
@@ -156,7 +153,7 @@ class qBittorrentClient {
             const data = new URLSearchParams();
             data.append('hashes', hash);
             data.append('deleteFiles', deleteFiles.toString());
-            const response = await this.axiosInstance.post(`${this.qbittorrentApi}/torrents/delete`, data);
+            const response = await this.axiosInstance.post(`${this.Configuration.config.qbittorrent.qbittorrentApi}/torrents/delete`, data);
             return response.data;
         } catch (error: any) {
             throw new Error(error);

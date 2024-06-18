@@ -1,7 +1,6 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Modal from '@mui/material/Modal';
-import LinearWithValueLabel from '../Layouts/Linear';
 import { Alert, Button, Divider, Typography, Grid } from '@mui/material';
 import { GridColDef, GridRenderCellParams, GridRowId } from '@mui/x-data-grid';
 import DataTable from './TorrentDataTable';
@@ -10,6 +9,7 @@ import GridCellExpand from '../Layouts/GridCellExpand';
 import axios from 'axios';
 import { AlertColor } from '@mui/material/Alert';
 import { useSocket } from '../../providers/socketProvider';
+import TorrentState from './TorrentState';
 
 
 const style = {
@@ -39,18 +39,23 @@ const columns: GridColDef[] = [
     { field: 'size', headerName: 'Size', type: 'number', width: 150 },
 ];
 
-export default function TorrentModal({hash, open, setOpen, added, setAdded, downloaded, setDownloaded}: {
+export default function TorrentModal({hash, open, setOpen, added, setAdded, waiting, setWaiting, progress, setProgress, downloading, setDownloading, downloaded, setDownloaded}: {
     hash: string
     open: boolean, 
     setOpen: React.Dispatch<React.SetStateAction<boolean>>, 
     added: boolean,
     setAdded: React.Dispatch<React.SetStateAction<boolean>>,
+    waiting: boolean,
+    setWaiting: React.Dispatch<React.SetStateAction<boolean>>,
+    progress: number,
+    setProgress: React.Dispatch<React.SetStateAction<number>>,
+    downloading: boolean,
+    setDownloading: React.Dispatch<React.SetStateAction<boolean>>,
     downloaded: boolean,
     setDownloaded: React.Dispatch<React.SetStateAction<boolean>>,
 }) {
     const handleClose = () => setOpen(false);
     const [steps, setSteps] = React.useState<string[]>([]);
-    const [progress, setProgress] = React.useState<number>(0);
     const [files, setFiles] = React.useState<RowFile[]>([]);
     const [selectedFiles, setSelectedFiles] = React.useState<GridRowId[]>([]);
     const [hideDataTable, setHideDataTable] = React.useState<boolean>(false);
@@ -67,7 +72,7 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         setAdded(true);
         setSteps(prev => [response.message, ...prev]);
         setProgress(progress + 16.66);
-    }, [hash, progress, setAdded]);
+    }, [hash, progress, setAdded, setProgress]);
 
     React.useEffect(() => {
         socket.on('torrent-added', handleTorrentAdded);
@@ -81,7 +86,7 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         if (response.hash !== hash) return;
         setSteps(prev => [response.message, ...prev]);
         setProgress(progress + 1.51);
-    }, [hash, progress]);
+    }, [hash, progress, setProgress]);
 
     React.useEffect(() => {
         socket.on('torrent-checking', handleTorrentChecking);
@@ -95,7 +100,7 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         if (response.hash !== hash) return;
         setSteps(prev => [response.message, ...prev]);
         setProgress(33.32);
-    }, [hash]);
+    }, [hash, setProgress]);
 
     React.useEffect(() => {
         socket.on('torrent-started', handleTorrentStarted);
@@ -109,7 +114,7 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         if (response.hash !== hash) return;
         setSteps(prev => [response.message, ...prev]);
         setProgress(progress + 16.66);
-    }, [hash, progress]);
+    }, [hash, progress, setProgress]);
 
     React.useEffect(() => {
         socket.on('torrent-trackers', handleTorrentTrackers);
@@ -129,7 +134,8 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         
         setFiles(files);
         setProgress(progress + 16.66);
-    }, [hash, progress]);
+        setWaiting(false);
+    }, [hash, progress, setProgress, setWaiting]);
 
     React.useEffect(() => {
         socket.on('torrent-files', handleTorrentFiles);
@@ -143,7 +149,8 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         if (response.hash !== hash) return;
         setSteps(prev => [response.message, ...prev]);
         setProgress(100);
-    }, [hash]);
+        setWaiting(false);
+    }, [hash, setProgress, setWaiting]);
 
     React.useEffect(() => {
         socket.on('torrent-paused', handleTorrentPaused);
@@ -179,11 +186,13 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         };
     }, [handleTorrentFilePriority, socket]);
 
-    const handleTorrentStatus = React.useCallback((response: {hash: string, progress: number, message: string}) => {
+    const handleTorrentStatus = React.useCallback((response: {hash: string, progress: number, downloading: boolean, message: string}) => {
         if (response.hash !== hash) return;
         setSteps(prev => [response.message, ...prev]);
         setProgress(response.progress);
-    }, [hash]);
+        setDownloading(response.downloading);
+        setWaiting(false);
+    }, [hash, setDownloading, setProgress, setWaiting]);
 
     React.useEffect(() => {
         socket.on('torrent-status', handleTorrentStatus);
@@ -214,7 +223,8 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         setAdded(false);
         setOpen(false);
         setProgress(0);
-    }, [hash, setAdded, setOpen, setProgress]);
+        setWaiting(false);
+    }, [hash, setAdded, setOpen, setProgress, setWaiting]);
 
     React.useEffect(() => {
         socket.on('torrent-deleted', handleTorrentDeleted);
@@ -229,7 +239,9 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
         setSteps(prev => [response.message, ...prev]);
         setDownloaded(true);
         setProgress(100);
-    }, [hash, setDownloaded]);
+        setDownloading(false);
+        setWaiting(false);
+    }, [hash, setDownloaded, setDownloading, setProgress, setWaiting]);
 
     React.useEffect(() => {
         socket.on('torrent-downloaded', handleTorrentDownloaded);
@@ -249,28 +261,32 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
     };
 
     const handleAddTrackers = () => {
+        setWaiting(true);
+
         axios.post('http://localhost:3000/api/torrent/trackers', { hash }).then((response) => {
-            console.log(response);
-            setSteps(prev => ['Trackers added.', ...prev]);
+            setSteps(prev => [response.data.message, ...prev]);
             setTrackersAdded(true);
-            setAlert('Trackers added.');
+            setAlert(response.data.message);
             setAlertType('success');
+            setWaiting(false);
         }).catch((error) => {
-            console.error(error);
-            setAlert('Error getting torrent trackers');
+            setAlert(error.message);
             setAlertType('error');
+            setWaiting(false);
         });
     };
 
     const handleRetry = () => {
-        socket.emit('torrent-retry', { hash });
+        setWaiting(true);
+        socket.emit('torrent-debug', { hash });
     };
 
     const handleDelete = () => {
-        // confirm
-        const confirm = window.confirm('Are you sure you want to delete this torrent ?');
-        if (!confirm) return;
-        socket.emit('torrent-delete', { hash });
+        const confirmDelete = window.confirm('Are you sure you want to delete this torrent ?');
+        if (!confirmDelete) return;
+        const confirmRemoveFiles = window.confirm('Do you want to remove the downloaded files ?');
+        setWaiting(true);
+        socket.emit('torrent-delete', { hash, removeFiles: confirmRemoveFiles });
     };
 
     const handlePlay = () => {
@@ -289,12 +305,9 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
                 <Box sx={{ border: "1px solid #515151;", borderRadius: 1, p: 1, height: "300px", overflowY: 'scroll', overflowX: 'none', display: 'flex', flexDirection: 'column-reverse' }}>
                     {steps.length > 0 && steps.map((step, index) => <Typography key={index} variant='body1' component="div">{step}</Typography>)}
                 </Box>
+
                 <Divider sx={{ my: 2 }}/>
 
-                <Box sx={{ mb: 2 }}>
-                    <LinearWithValueLabel progress={progress}/>
-                </Box>
- 
                 {alert && (
                     <Alert severity={alertType as AlertColor} sx={{ my: 2, width: '100%' }}>{alert}</Alert>
                 )}
@@ -306,17 +319,27 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, down
                     </>
                 )}
 
+                <TorrentState
+                    hash={hash} 
+                    progress={progress} 
+                    downloading={downloading}
+                    added={added} 
+                    waiting={waiting} 
+                    setWaiting={setWaiting} 
+                    downloaded={downloaded} 
+                />
+
                 {added && (
                     <Grid container justifyContent={"flex-end"} spacing={2} sx={{ mt: 2 }}>
                         <Grid item>
                             <Button variant="contained" onClick={handleDelete}>Delete</Button>
                         </Grid>
-                        {!trackersAdded && (
+                        {!trackersAdded && !downloaded && (
                             <Grid item>
                                 <Button variant="contained" onClick={handleAddTrackers}>Add trackers</Button>
                             </Grid>
                         )}
-                        {files && files.length < 1 && (
+                        {files && files.length < 1 && !downloaded && (
                             <Grid item>
                                 <Button variant="contained" onClick={handleRetry}>Retry</Button>
                             </Grid>

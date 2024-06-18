@@ -1,15 +1,16 @@
 import axios from 'axios';
+import Configuration from '../configuration';
 
 class StremioClient {
-    protected stremioAppHost: string;
+    protected Configuration: Configuration;
     protected connected: boolean = false;
 
-    constructor(stremioAppHost: string) {
-        this.stremioAppHost = stremioAppHost;
+    constructor(Configuration: Configuration) {
+        this.Configuration = Configuration;
     }
  
     protected connection(): void {        
-        axios.get(this.stremioAppHost + "/settings").then((response) => {
+        axios.get(this.Configuration.config.stremio.stremioAppHost + "/settings").then((response) => {
             console.log('Connected to Stremio server');
             this.connected = true;
         }).catch((error) => {

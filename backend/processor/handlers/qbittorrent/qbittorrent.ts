@@ -1,27 +1,32 @@
 import qBittorrentClient from './qbittorrent-client';
 import axios from 'axios';
+import FileSystem from '../filesystem';
+import Configuration from '../configuration';
+import { Express } from 'express';
+import { Server } from 'socket.io';
+import Database from '../../../db';
 
 class qBittorrent extends qBittorrentClient {
-    private app: any;
-    private io: any;
-    private db: any;
+    private FileSystem: FileSystem;
+    private app: Express;
+    private io: Server;
+    private db: Database;
     private trackers: string[] = [];
     private addedTorrents = new Set<string>();
     private checkingTorrents = new Set<string>();
+    private debugTorrents = new Set<string>();
     
-    constructor(qBittorrentAppHost: string, qbittorrentApi: string, qbittorrentCredentials: string, app: any, io: any, db: any) {
-        super(qBittorrentAppHost, qbittorrentApi, qbittorrentCredentials);
+    constructor(Configuration: Configuration, FileSystem: FileSystem, app: Express, io: Server, db: Database) {
+        super(Configuration);
+        this.FileSystem = FileSystem;
         this.app = app;
         this.io = io;
         this.db = db;
         this.addedTorrents = new Set<string>();
         this.checkingTorrents = new Set<string>();
+        this.debugTorrents = new Set<string>();
         this.connection();
         this.getLastTrackers();
-    };
-
-    public updateConfig(qBittorrentAppHost: string): void {
-        this.qBittorrentAppHost = qBittorrentAppHost;
     };
 
     public buildEndpoints(): void {
@@ -34,22 +39,21 @@ class qBittorrent extends qBittorrentClient {
         this.app.get('/api/torrent/status', this.getTorrentStatus);
         this.app.post('/api/torrent/trackers', this.AddTorrentTrackers);
 
-
-
-
         this.app.get('/api/torrent/watch', async (req: any, res: any) => {
+            // TODO : PATH IS WRONG
             const hash = req.query.hash;
             if (!hash) return res.status(400).send({ error: 'Missing hash parameter' });
             const info = await this.db.get(hash, true);
             if (info && info.qbittorrent && info.qbittorrent.qbittorrentMediaPath) {
-                res.status(200).send({ info: info.qbittorrent });
+                const mediaFile = this.FileSystem.getFirstMediaFile(info.qbittorrent.qbittorrentMediaPath)
+                console.log(`Starting video: ${mediaFile}`);
+                
+                const videoStarted = this.FileSystem.startVideoHardPath(mediaFile);
+                res.status(200).send({ result: videoStarted });
             } else {
                 res.status(404).send({ error: 'Torrent path not found.' });
             }
         });
-
-
-
 
         this.io.on('connection', (socket: any) => {
             console.log('user connected on qbittorrent');
@@ -74,18 +78,37 @@ class qBittorrent extends qBittorrentClient {
                 this.setFilePriority(response.hash, response.fileIndices, response.priority);
             });
 
-            socket.on('torrent-retry', (response: any) => {
+            socket.on('torrent-debug', (response: any) => {
+                if (this.debugTorrents.has(response.hash)) {
+                    this.io.emit('torrent-error', { hash: response.hash, message: 'Torrent already debugging.' });
+                    return;
+                }
+                this.debugTorrents.add(response.hash);
+                this.debugTorrent(response.hash);
+            });
+
+            socket.on('torrent-check', async (response: any) => {
                 if (this.checkingTorrents.has(response.hash)) {
-                    this.io.emit('torrent-error', { hash: response.hash, message: 'Torrent already retrying.' });
+                    this.io.emit('torrent-error', { hash: response.hash, message: 'Torrent already checking.' });
                     return;
                 }
 
                 this.checkingTorrents.add(response.hash);
-                this.retryTorrent(response.hash);
+
+                try {
+                    const downloaded = await this.waitFileDownloaded(response.hash);
+                    if (downloaded) {
+                        this.io.emit('torrent-downloaded', { hash: response.hash, message: 'Torrent downloaded.' });
+                    }
+                } catch (error: any) {
+                    this.io.emit('torrent-error', { hash: response.hash, message: error.message });
+                } finally {
+                    this.checkingTorrents.delete(response.hash);
+                }
             });
 
-            socket.on('torrent-delete', (response: any) => {
-                this.deleteTorrent(response.hash);
+            socket.on('torrent-delete', (response: {hash: string, removeFiles: boolean}) => {
+                this.deleteTorrent(response.hash, response.removeFiles);
             });
 
             socket.on('disconnect', () => {
@@ -212,15 +235,9 @@ class qBittorrent extends qBittorrentClient {
             this.io.emit('torrent-file-priority', { hash, message: 'Files priority set.'});
 
             // wait for file to be downloaded
-            const downloaded = await this.waitFileDownloaded(hash);
-            console.log(downloaded);
-            
+            const downloaded = await this.waitFileDownloaded(hash);            
 
-            if (downloaded.progress === 1) {
-                await this.updateDBTorrentState(hash, {
-                    qbittorrentDownloaded: true,
-                    qbittorrentMediaPath: downloaded.content_path,
-                });
+            if (downloaded) {
                 this.io.emit('torrent-downloaded', { hash, message: 'Torrent downloaded.'});
             }
         } catch (error: any) {
@@ -242,19 +259,34 @@ class qBittorrent extends qBittorrentClient {
     };
 
     private waitFileDownloaded = async (hash: string) => {
-        let status: any;
+        let downloaded = false;
 
         while (true) {
             const torrentStatus = await this.getTorrentInfoApi('movies', hash);
-            status = torrentStatus[0];
-            
+            const status = torrentStatus[0];
+            const errorState = status.state === 'error' || status.state === 'missingFiles';
+            const stillDownloading = status.state === 'downloading' || status.state === 'metaDL' || status.state === 'queuedDL' || status.state === 'stalledDL' || status.state === 'checkingDL' || status.state === 'forcedDL';
+            downloaded = status.state === 'uploading' || status.state === 'seeding' || status.amount_left === 0 || status.progress === 1;
+
             this.io.emit('torrent-status', { 
-                hash, progress: 
-                status.progress * 100, 
+                hash, 
+                progress: status.progress * 100, 
+                downloading: stillDownloading,
                 message: `Torrent state is ${status.state} with download speed of ${status.dlspeed} and progress of ${status.progress * 100}%`
             });
 
-            if (status.state === 'uploading' || status.state === 'seeding' || status.amount_left === 0 || status.progress === 1) {
+            if (errorState) {
+                throw new Error(`Torrent download failed with state: ${status.state}`);
+            }
+
+            await this.updateDBTorrentState(hash, {
+                qbittorrentMediaPath: status.content_path,
+                qBittorrentProgress: Math.round(status.progress * 100),
+                qbittorrentDownloading: stillDownloading,
+                qbittorrentDownloaded: downloaded,
+            });
+
+            if (downloaded) {
                 this.addedTorrents.delete(hash);
                 break;
             }
@@ -262,7 +294,7 @@ class qBittorrent extends qBittorrentClient {
             await new Promise(resolve => setTimeout(resolve, 30000));
         }
 
-        return status;
+        return downloaded;
     };
 
     private AddTorrentTrackers = async (req: any, res: any) => {
@@ -271,13 +303,13 @@ class qBittorrent extends qBittorrentClient {
         if (!hash) return res.status(400).send({ error: 'Missing hash parameter' });
 
         this.addTorrentTrackersApi(hash, this.trackers).then((response: any) => {
-            res.send(response);
+            res.send({ message: 'Trackers added.'});
         }).catch((error: any) => {
-            res.status(500).send(error);
+            res.status(500).send(error.message);
         });
     };
 
-    private retryTorrent = async (hash: string) => {
+    private debugTorrent = async (hash: string) => {
         const category = 'movies'; // personnalize
         
         try {
@@ -301,9 +333,9 @@ class qBittorrent extends qBittorrentClient {
         }
     };
 
-    private deleteTorrent = async (hash: string) => {
+    private deleteTorrent = async (hash: string, removeFiles: boolean) => {
         try {
-            await this.deleteTorrentApi(hash, true);
+            await this.deleteTorrentApi(hash, removeFiles);
             await this.updateDBTorrentState(hash, {
                 qbittorrentAdded: false,
                 qbittorrentDownloaded: false,

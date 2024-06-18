@@ -6,10 +6,12 @@ import { Alert, Button, Divider, Typography } from '@mui/material';
 import { AlertColor } from '@mui/material/Alert';
 import { GridColDef, GridRowId } from '@mui/x-data-grid';
 
-import { ConfigurationLibrary, RowLibrary } from '../../../../interfaces';
+import { ConfigurationLibrary, Folder, RowLibrary } from '../../../../interfaces';
 import PlexDataTable from './PlexDataTable';
 import { useSocket } from '../../providers/socketProvider';
-
+import axios from 'axios';
+import TreeView from '../Layouts/TreeView';
+import Loading from '../Layouts/Loading';
 
 const style = {
   position: 'absolute',
@@ -38,9 +40,33 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
     const [alertType, setAlertType] = React.useState<string>('');
     const [libraries, setLibraries] = React.useState<RowLibrary[]>([]);
     const [selectedLibraries, setSelectedLibraries] = React.useState<GridRowId[]>([]);
+    const [selectedLibrary, setSelectedLibrary] = React.useState<RowLibrary>(false as unknown as RowLibrary);
     const [hideDataTable, setHideDataTable] = React.useState<boolean>(false);
+    const [LibraryFolders, setLibraryFolders] = React.useState<Folder[]>([]);
+    const [waitingForLibraryFolders, setWaitingForLibraryFolders] = React.useState<boolean>(false);
+    const [selectedFolderPath, setSelectedFolderPath] = React.useState<string>('' as string);
+    const [hideLibraryFolders, setHideLibraryFolders] = React.useState<boolean>(false);
 
     const { socket } = useSocket();
+
+    React.useEffect(() => {
+        if (!open) return;
+
+        setSteps([]);
+        setProgress(0);
+        setAlert('');
+        setAlertType('');
+        setLibraries([]);
+        setSelectedLibraries([]);
+        setSelectedLibrary(false as unknown as RowLibrary);
+        setHideDataTable(false);
+        setLibraryFolders([]);
+        setWaitingForLibraryFolders(false);
+        setSelectedFolderPath('' as string);
+        setHideLibraryFolders(false);
+
+        socket.emit('get-plex-libraries', { hash });
+    }, [hash, open, socket]);
 
     const handlePlexLibraries = React.useCallback((response: {hash: string, plexStoragePath: ConfigurationLibrary[]}) => {
         if (response.hash !== hash) return;
@@ -52,6 +78,7 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         
         setLibraries(libraries);
         setProgress(progress + 100/3);
+        setHideDataTable(false);
     }, [hash, progress]);
 
     React.useEffect(() => {
@@ -62,52 +89,89 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         };
     }, [handlePlexLibraries, socket]);
 
-    // TODO !!!
+    const handlePlexCopied = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Plex copied.', ...prev]);
+        setHideLibraryFolders(true);
+        setAlert(response.message);
+        setAlertType('success');
+        setProgress(progress + 100/3);
+    }, [hash, progress]);
 
     React.useEffect(() => {
-
-        socket.on('plex-copied', (response) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => ['Plex copied.', ...prev]);
-            setAlert(response.message);
-            setAlertType('success');
-            setProgress(progress + 100/3);
-        });
-
-        socket.on('plex-scanned', (response) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => ['Plex library scanned.', ...prev]);
-            setAlert(response.message);
-            setAlertType('success');
-            setHideDataTable(true);
-            setProgress(100);
-        });
-
-        socket.on('plex-error', (response) => {
-            if (response.hash !== hash) return;
-            setSteps(prev => ['Plex error detected.', ...prev]);
-            setAlert(response.message);
-            setAlertType('error');
-        });
+        socket.on('plex-copied', handlePlexCopied);
 
         return () => {
-            socket.off('plex-librairies');
-            socket.off('plex-copied');
-            socket.off('plex-scanned');
-            socket.off('plex-metadata-info');
-            socket.off('plex-metadata-done');
-            socket.off('plex-error');
+            socket.off('plex-copied', handlePlexCopied);
         };
-    });
+    }, [handlePlexCopied, socket]);
+
+    const handlePlexScanned = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Plex library scanned.', ...prev]);
+        setAlert(response.message);
+        setAlertType('success');
+        setHideDataTable(true);
+        setProgress(100);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('plex-scanned', handlePlexScanned);
+
+        return () => {
+            socket.off('plex-scanned', handlePlexScanned);
+        };
+    }, [handlePlexScanned, socket]);
+
+    const handlePlexError = React.useCallback((response: {hash: string, message: string}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Plex error detected.', ...prev]);
+        setAlert(response.message);
+        setAlertType('error');
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('plex-error', handlePlexError);
+
+        return () => {
+            socket.off('plex-error', handlePlexError);
+        };
+    }, [handlePlexError, socket]);
+
 
     const handleSelectedLibraries = () => {    
         if (selectedLibraries.length > 1)  {
             setAlert('Please select only one library'); 
             return; 
-        }        
+        }
 
-        socket.emit('plex-copy', { hash, library: selectedLibraries[0] });
+        const libraryContent = libraries.find((library) => library.id === selectedLibraries[0]);
+        if (!libraryContent) {
+            setAlert('Library not found');
+            return;
+        }
+
+        setSelectedLibrary(libraryContent);
+        setSelectedFolderPath(libraryContent.localpath || '');
+        setHideDataTable(true);
+        setWaitingForLibraryFolders(true);
+        setSteps(prev => ['Fetching Library Content.', ...prev]);
+
+        axios.get(`http://localhost:3000/api/plex/library-content/${selectedLibraries[0]}`).then((response) => {
+            setSteps(prev => ['Plex library content fetched.', ...prev]);
+            setLibraryFolders(response.data.content);
+            setWaitingForLibraryFolders(false);
+        }).catch((error) => {
+            console.log(error);
+            setWaitingForLibraryFolders(false);
+            setHideDataTable(false);
+        });
+        // socket.emit('plex-copy', { hash, library: selectedLibraries[0] });
     };
+
+    const handleCopy = () => {
+        socket.emit('plex-copy', { hash, library: selectedLibrary.id, path: selectedFolderPath });
+    }
 
     return (
         <Modal
@@ -130,8 +194,27 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
                 {!hideDataTable && libraries.length > 0 && (
                     <>
                         <PlexDataTable columns={columns} rows={libraries} handle={setSelectedLibraries}/>
-                        <Button variant="contained" onClick={handleSelectedLibraries} sx={{ mt: 2, float: 'right' }}>Copy media to selected library</Button>
+                        <Button variant="contained" onClick={handleSelectedLibraries} sx={{ mt: 2, float: 'right' }}>Select Library</Button>
                     </>
+                )}
+
+                {!hideLibraryFolders && !waitingForLibraryFolders && LibraryFolders.length > 0 && (
+                    <>
+                        <Typography variant='body1' component='div' sx={{ mb: 2 }}>
+                            {selectedLibrary.title} {' '}
+                            <a href={selectedFolderPath} target="_blank" rel="noopener noreferrer">{selectedFolderPath}</a>
+                        </Typography>
+                        <Box sx={{ border: "1px solid #515151;", borderRadius: 1, p: 1, height: "300px", overflowY: 'scroll', overflowX: 'none',}}>
+                            <TreeView folders={LibraryFolders} rootPath={selectedLibrary.localpath || ''} setPath={setSelectedFolderPath}/>
+                        </Box>
+                        <Button variant="contained" onClick={handleCopy} sx={{ mt: 2, float: 'right' }}>Copy media to selected library</Button>
+                    </>
+                )}
+
+                {waitingForLibraryFolders && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                        <Loading/>
+                    </Box>
                 )}
 
                 {alert && (

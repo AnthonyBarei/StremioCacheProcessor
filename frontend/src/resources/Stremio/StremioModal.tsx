@@ -63,7 +63,8 @@ export default function StremioModal({ metadata, open, setOpen, stremioState, se
         setSteps([response.message, ...steps]);
         setAlert(response.message);
         setAlertType('error');
-    }, [metadata.id, steps]);
+        setWaiting(false);
+    }, [metadata.id, setWaiting, steps]);
 
     useEffect(() => {      
         socket.on('stremio-error', handleStremioError);
