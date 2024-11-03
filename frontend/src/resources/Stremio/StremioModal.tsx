@@ -22,7 +22,7 @@ const style = {
   overflowY: 'auto',
 };
 
-export default function StremioModal({ metadata, open, setOpen, stremioState, setStremioState, waiting, setWaiting, copied, setCopied, downloaded, setDownloaded }: { 
+export default function StremioModal({ metadata, open, setOpen, stremioState, setStremioState, waiting, setWaiting, copied, setCopied, downloaded, setDownloaded, openDefineAs }: { 
     metadata: FolderProcess, 
     open: boolean, 
     setOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -33,7 +33,8 @@ export default function StremioModal({ metadata, open, setOpen, stremioState, se
     copied: boolean,
     setCopied: React.Dispatch<React.SetStateAction<boolean>>
     downloaded: boolean,
-    setDownloaded: React.Dispatch<React.SetStateAction<boolean>>
+    setDownloaded: React.Dispatch<React.SetStateAction<boolean>>,
+    openDefineAs: React.Dispatch<React.SetStateAction<boolean>>,
 }) {
     const handleClose = () => setOpen(false);
     const [steps, setSteps] = useState<string[]>([]);
@@ -153,7 +154,8 @@ export default function StremioModal({ metadata, open, setOpen, stremioState, se
                     waiting={waiting} 
                     setWaiting={setWaiting} 
                     downloaded={downloaded} 
-                    copied={copied} 
+                    copied={copied}
+                    openDefineAs={openDefineAs}
                 />
 
                 {alert && (

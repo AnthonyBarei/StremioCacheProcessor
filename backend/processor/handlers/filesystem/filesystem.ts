@@ -2,13 +2,15 @@ import * as fs from 'fs';
 import chokidar from 'chokidar';
 import path from 'path';
 import { exec } from 'child_process';
-import ncp from 'ncp';
-import Configuration from './configuration';
+import { Server as SocketIOServer } from 'socket.io';
+import Configuration from '../configuration';
+import CopyManager from './copymanager';
 
-class FileSystem {
+class FileSystem extends CopyManager {
     public Configuration: Configuration;
 
-    constructor(Configuration: Configuration) {
+    constructor(Configuration: Configuration, io: SocketIOServer) {
+        super(io);
         this.Configuration = Configuration;
     }
 
@@ -84,7 +86,7 @@ class FileSystem {
         return stats.birthtime;
     }
 
-    public copyFile(folder: string, file: string, dest: string): boolean {
+    public copyFile(folder: string, file: string, dest: string, destFile: string): boolean {
         try {            
             const source = path.join(this.Configuration.config.stremio.stremioCachePath, folder, file);            
 
@@ -96,13 +98,13 @@ class FileSystem {
             // Replace invalid characters in the folder name
             const safeDest = this.safePath(dest);
 
-            const target = path.join(this.Configuration.config.user.userSaveFolder, safeDest);
-            if (!fs.existsSync(target)) {
-                fs.mkdirSync(target);
+            if (!fs.existsSync(safeDest)) {
+                fs.mkdirSync(safeDest);
             }
-
+            
+            const target = this.safePath(destFile);
             // copy source file to newly created folder
-            fs.copyFileSync(source, path.join(target, `${safeDest}.mkv`));
+            fs.copyFileSync(source, path.join(safeDest, target));
 
             return true;
         } catch (err) {
@@ -112,7 +114,7 @@ class FileSystem {
         return false;
     };
 
-    public copyFolderToPlexServer(source: string, dest: string): boolean {
+    public async copyFolderToPlexServer(source: string, dest: string): Promise<boolean> {
         try {
             if (!fs.existsSync(source)) {
                 console.error('Source does not exist');
@@ -122,30 +124,26 @@ class FileSystem {
             const fileName = path.basename(source);
             const safeDest = this.safePath(path.join(dest, fileName));
             let target = safeDest;
-            let parsedPath = path.parse(target);
-            let filenameWithoutExtension = parsedPath.name;
     
             if (fs.lstatSync(source).isDirectory()) {
                 if (!fs.existsSync(target)) {
                     fs.mkdirSync(target);
-                    target = path.join(target, fileName);
                 }
+                // Do not append fileName to target if source is a directory
             } else {
+                // If source is a file, ensure the directory for safeDest exists
                 if (!fs.existsSync(safeDest)) {
                     fs.mkdirSync(safeDest);
                 }
-                target = path.join(safeDest, fileName);
+                // Create a directory with the filename in safeDest
+                const fileDir = path.join(safeDest, fileName);
+                if (!fs.existsSync(fileDir)) {
+                    fs.mkdirSync(fileDir);
+                }
+                target = fileDir; // Set target to the new directory
             }
     
-            // copy source to newly created folder
-            ncp(source, target, function (err: any) {
-                if (err) {
-                    console.error('Unable to copy: ' + err);
-                    return false;
-                }
-                console.log('Copied successfully');
-                return true;
-            });
+            this.enqueueCopy(source, target);
 
             return true;
         } catch (error) {
@@ -229,8 +227,9 @@ class FileSystem {
 
     public getFoldersFromPath(folderPath: string): any[] {
         let result = [];
-        const files = fs.readdirSync(folderPath);
-
+        
+        const files = fs.readdirSync(folderPath);        
+        
         for (const file of files) {
             const filePath = path.join(folderPath, file);
             const stat = fs.statSync(filePath);
@@ -241,12 +240,13 @@ class FileSystem {
                     subfolders: this.getFoldersFromPath(filePath)
                 });
             }
-        }
-
-        // TODO : cache this
+        }        
 
         return result;
     }
+
+    private isNetworkShare = (path: string) => path.startsWith('\\\\');
+
 }
 
 export default FileSystem;

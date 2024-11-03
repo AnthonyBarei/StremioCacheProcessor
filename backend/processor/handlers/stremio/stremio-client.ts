@@ -9,7 +9,7 @@ class StremioClient {
         this.Configuration = Configuration;
     }
  
-    protected connection(): void {        
+    protected connection(): void {                
         axios.get(this.Configuration.config.stremio.stremioAppHost + "/settings").then((response) => {
             console.log('Connected to Stremio server');
             this.connected = true;

@@ -9,7 +9,6 @@ import { GridColDef, GridRowId } from '@mui/x-data-grid';
 import { ConfigurationLibrary, Folder, RowLibrary } from '../../../../interfaces';
 import PlexDataTable from './PlexDataTable';
 import { useSocket } from '../../providers/socketProvider';
-import axios from 'axios';
 import TreeView from '../Layouts/TreeView';
 import Loading from '../Layouts/Loading';
 
@@ -23,6 +22,8 @@ const style = {
   border: '2px solid #000',
   boxShadow: 24,
   p: 4,
+  maxHeight: '90vh',
+  overflowY: 'auto',
 };
 
 const columns: GridColDef[] = [
@@ -44,6 +45,7 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
     const [hideDataTable, setHideDataTable] = React.useState<boolean>(false);
     const [LibraryFolders, setLibraryFolders] = React.useState<Folder[]>([]);
     const [waitingForLibraryFolders, setWaitingForLibraryFolders] = React.useState<boolean>(false);
+    const [waitingForCopy, setWaitingForCopy] = React.useState<boolean>(false);
     const [selectedFolderPath, setSelectedFolderPath] = React.useState<string>('' as string);
     const [hideLibraryFolders, setHideLibraryFolders] = React.useState<boolean>(false);
 
@@ -62,6 +64,7 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         setHideDataTable(false);
         setLibraryFolders([]);
         setWaitingForLibraryFolders(false);
+        setWaitingForCopy(false);
         setSelectedFolderPath('' as string);
         setHideLibraryFolders(false);
 
@@ -96,6 +99,7 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         setAlert(response.message);
         setAlertType('success');
         setProgress(progress + 100/3);
+        setWaitingForCopy(false);
     }, [hash, progress]);
 
     React.useEffect(() => {
@@ -123,11 +127,28 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         };
     }, [handlePlexScanned, socket]);
 
+    const handleLibraryContent = React.useCallback((response: {hash: string, content: Folder[]}) => {
+        if (response.hash !== hash) return;
+        setSteps(prev => ['Library content fetched.', ...prev]);
+        setLibraryFolders(response.content);
+        setWaitingForLibraryFolders(false);
+    }, [hash]);
+
+    React.useEffect(() => {
+        socket.on('plex-library-content', handleLibraryContent);
+
+        return () => {
+            socket.off('plex-library-content', handleLibraryContent);
+        };
+    }, [handleLibraryContent, socket]);
+
     const handlePlexError = React.useCallback((response: {hash: string, message: string}) => {
         if (response.hash !== hash) return;
         setSteps(prev => ['Plex error detected.', ...prev]);
         setAlert(response.message);
         setAlertType('error');
+        setWaitingForLibraryFolders(false);
+        setHideDataTable(false);
     }, [hash]);
 
     React.useEffect(() => {
@@ -155,22 +176,16 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
         setSelectedFolderPath(libraryContent.localpath || '');
         setHideDataTable(true);
         setWaitingForLibraryFolders(true);
-        setSteps(prev => ['Fetching Library Content.', ...prev]);
+        setSteps(prev => ['Fetching Library Content. This Might Take a While...', ...prev]);
 
-        axios.get(`http://localhost:3000/api/plex/library-content/${selectedLibraries[0]}`).then((response) => {
-            setSteps(prev => ['Plex library content fetched.', ...prev]);
-            setLibraryFolders(response.data.content);
-            setWaitingForLibraryFolders(false);
-        }).catch((error) => {
-            console.log(error);
-            setWaitingForLibraryFolders(false);
-            setHideDataTable(false);
-        });
-        // socket.emit('plex-copy', { hash, library: selectedLibraries[0] });
+        const confirmForceLibraryCheck = window.confirm('Do you want to force a library check?');
+
+        socket.emit('plex-get-library-content', { hash, key: selectedLibraries[0], force: confirmForceLibraryCheck});
     };
 
     const handleCopy = () => {
         socket.emit('plex-copy', { hash, library: selectedLibrary.id, path: selectedFolderPath });
+        setWaitingForCopy(true);
     }
 
     return (
@@ -212,6 +227,12 @@ export default function PlexModal({open, setOpen, hash}: {open: boolean, setOpen
                 )}
 
                 {waitingForLibraryFolders && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                        <Loading/>
+                    </Box>
+                )}
+
+                {waitingForCopy && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
                         <Loading/>
                     </Box>

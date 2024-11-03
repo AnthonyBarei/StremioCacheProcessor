@@ -1,19 +1,21 @@
+TODO :
+ - Add Plex metadata manager if possible (as command line in config) : 
+    - After a bunch of tests, this is not recommended since kometa is supposed to be added as CRON on computer.
+    - Should be a general button in dashboard and will need to prevent running it twice.
 
-options to add to movie card :
-    - display full metadata
-    - cancel all websocket actions (checking download, download)
-    - correct metadata by choosing in stremio API !
+- Frontend Progress Notification
+For the frontend progress, you'll need to implement a mechanism (like WebSockets) to communicate the start, progress (if applicable), 
+and completion of the copy operation to the user. This is a more complex topic and would depend on your specific frontend and backend setup.
 
+- Stopping Node Server
+If the Node.js server is stopped before the copy operation completes, the operation will be halted. 
+To mitigate this, consider using a background job or worker process that can handle tasks independently of the main server process.
 
-Add Plex metadata manager if possible (as command line in config) : 
-    After a bunch of tests, this is not recommended since kometa is supposed to be added as CRON on computer.
-    Also it will eat a lot of resources if allowing several execution of kometa through several MediaCards
-
-handle multiple watch possibilities (stremio, qbittorrent) wich means that each entity must have their own watch method
-qbittorent will be tricky since there is the possibility of downloading multiple files for one torrent
-in that case select first file 
-
-
+- For Plex modal :
+  - Display the selected library
+  - Add a manually scan library button
+  - add a PlexState to MovieCard ?
+   
 DONE :
 - Detect event when files are created in stremio cache !
 - make the copy icon colored when ready to copy cache files ! 
@@ -21,3 +23,12 @@ DONE :
 - Button on home to reload manually the metadatas (redetect folders in server)
 - Button on MovieCard to retry detecting the stremio state downloading 
 - Better display of the stremio state on MovieCard
+- options to add to movie card :
+    - display full metadata
+    - correct metadata by choosing in stremio API !
+- handle multiple watch possibilities (stremio, qbittorrent) wich means that each entity must have their own watch method
+  qbittorent will be tricky since there is the possibility of downloading multiple files for one torrent
+  in that case select first file 
+- verify metadata destination is set before stremio copy or qbittorrent download.
+    If not display DefineAsModal to select path then pursue.
+    If yes, pursue

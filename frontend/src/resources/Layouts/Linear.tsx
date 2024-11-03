@@ -17,10 +17,10 @@ function LinearProgressWithLabel(props: LinearProgressProps & { value: number })
   );
 }
 
-export default function LinearWithValueLabel({progress=0}: {progress: number}) {
+export default function LinearWithValueLabel({progress=0, color='primary'}: {progress: number, color?: "inherit" | "secondary" | "primary" | "error" | "info" | "success" | "warning"}) {
   return (
     <Box sx={{ width: '100%' }}>
-      <LinearProgressWithLabel value={progress} />
+      <LinearProgressWithLabel value={progress} color={color}/>
     </Box>
   );
 }

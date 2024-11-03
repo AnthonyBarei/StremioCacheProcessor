@@ -290,7 +290,18 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, wait
     };
 
     const handlePlay = () => {
+        setWaiting(true);
 
+        axios.get(`http://localhost:3000/api/torrent/watch?hash=${hash}`).then(() => {
+            setSteps(prev => ['Playing file', ...prev]);
+            setAlert('Playing file');
+            setAlertType('success');
+            setWaiting(false);
+        }).catch((err) => {
+            setAlert(err.message);
+            setAlertType('error');
+            setWaiting(false);
+        });
     };
 
     return (
@@ -339,12 +350,12 @@ export default function TorrentModal({hash, open, setOpen, added, setAdded, wait
                                 <Button variant="contained" onClick={handleAddTrackers}>Add trackers</Button>
                             </Grid>
                         )}
-                        {files && files.length < 1 && !downloaded && (
+                        {files && files.length < 1 && !downloaded && !waiting && (
                             <Grid item>
                                 <Button variant="contained" onClick={handleRetry}>Retry</Button>
                             </Grid>
                         )}
-                        {downloaded && (
+                        {downloaded && !waiting && (
                             <Grid item>
                                 <Button variant="contained" onClick={handlePlay}>Play File</Button>
                             </Grid>

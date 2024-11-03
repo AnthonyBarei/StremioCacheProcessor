@@ -16,13 +16,14 @@ function formatBytes(bytes: number, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, downloaded }: { 
+const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, downloaded, openDefineAs }: { 
     metadata: FolderProcess,
     stremioState: StremioStateFolderProcess, 
     waiting: boolean,
     setWaiting: React.Dispatch<React.SetStateAction<boolean>>,
     copied: boolean, 
-    downloaded: boolean 
+    downloaded: boolean,
+    openDefineAs: React.Dispatch<React.SetStateAction<boolean>>,
 }) => {
     const handleResync = () => {
         if (downloaded) return;
@@ -38,6 +39,7 @@ const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, dow
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
             <Typography variant="body2" component="div">Folder: {metadata.id}</Typography>
+            
             {downloaded && (
                 <>
                     <Typography variant="body2" component="div">File Downloaded.</Typography>
@@ -45,7 +47,15 @@ const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, dow
                         <Typography variant="body2" component="div">File Copied.</Typography>
                     )}
                     {!waiting && !copied && (
-                        <Button variant="contained" onClick={handleCopy} sx={{ mt: 2 }}>Copy Cache Files to Local path</Button>
+                        <>
+                            {metadata.destination && (
+                                <Button variant="contained" onClick={handleCopy} sx={{ mt: 2 }}>Copy Cache Files to Local path</Button>
+                            )}
+
+                            {!metadata.destination && (
+                                <Button variant="contained" onClick={() => openDefineAs(true)} sx={{ mt: 2 }}>Set Destination path</Button>
+                            )}
+                        </>
                     )}
                 </>
             )}
@@ -64,7 +74,7 @@ const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, dow
                             <Typography variant="body2" component="div">Stream speed: {formatBytes(stremioState.downloadSpeed)}</Typography>
                             <Typography variant="body2" component="div">Cached: {formatBytes(stremioState.downloadSize)} / {stremioState.progress}%</Typography>
                             <Typography variant="body2" component="div">Total size: {formatBytes(stremioState.size)}</Typography>
-                            <LinearWithValueLabel progress={stremioState.progress}/>  
+                            <LinearWithValueLabel progress={stremioState.progress} color="secondary"/>  
                         </>
                     )}
                 </>
@@ -73,7 +83,7 @@ const StremioState = ({ metadata, stremioState, waiting, setWaiting, copied, dow
 
             {waiting && (
                 <Box sx={{ mt: 2}}>
-                    <LinearIndeterminate/>   
+                    <LinearIndeterminate color="secondary"/>   
                 </Box>
             )}
         </Box>

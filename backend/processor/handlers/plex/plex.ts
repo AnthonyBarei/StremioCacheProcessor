@@ -1,6 +1,6 @@
 import PlexClient from './plexClient';
 import { spawn } from 'child_process';
-import FileSystem from '../filesystem';
+import FileSystem from '../filesystem/filesystem';
 import { ConfigurationLibrary } from '../../../../interfaces';
 import Configuration from '../configuration';
 import { Express } from 'express';
@@ -13,6 +13,7 @@ class Plex extends PlexClient {
     private app: Express;
     private io: Server;
     private db: Database;
+    private copyFolders: Set<string>;
 
     constructor(Configuration: Configuration, FileSystem: FileSystem, app: Express, io: Server, db: Database) {
         super(Configuration);
@@ -20,6 +21,7 @@ class Plex extends PlexClient {
         this.app = app;
         this.db = db;
         this.io = io;
+        this.copyFolders = new Set();
     }
 
     public buildEndpoints(): void {
@@ -33,15 +35,6 @@ class Plex extends PlexClient {
             console.log(libraries);
             
             res.status(200).send({ libraries });
-        });
-
-        this.app.get('/api/plex/library-content/:key', (req: any, res: any) => {
-            const { key } = req.params;
-            
-            const library = this.Configuration.config.plex.plexStoragePath.find((lib: ConfigurationLibrary) => lib.key === key)?.path || "";
-            
-            const content = this.FileSystem.getFoldersFromPath(library);
-            res.status(200).send({ content });
         });
 
         this.app.post('/api/plex/scan/:key', async (req: any, res: any) => {
@@ -58,12 +51,17 @@ class Plex extends PlexClient {
                 try {                    
                     this.io.emit('plex-libraries', { hash: data.hash, plexStoragePath: this.Configuration.config.plex.plexStoragePath });
                 } catch (err: any) {
-                    console.log(err.message);
                     this.io.emit('plex-error', { hash: data.hash, message: err.message });
                 }
             });
 
-            socket.on('plex-copy', (data: {hash: string, library: string, path: string}) => {                
+            socket.on('plex-copy', (data: {hash: string, library: string, path: string}) => {
+                if (this.copyFolders.has(data.hash)) {
+                    this.io.emit('plex-error', { hash: data.hash, message: 'Folder already being copied.' });
+                    return;          
+                }
+
+                this.copyFolders.add(data.hash);
                 this.copy(data.hash, data.library, data.path);
             });
 
@@ -82,13 +80,30 @@ class Plex extends PlexClient {
                 }
             });
 
+            socket.on('plex-get-library-content', async (data: {hash: string, key: string, force: boolean}) => {
+                try {
+                    const library = this.Configuration.config.plex.plexStoragePath.find((lib: ConfigurationLibrary) => lib.key === data.key)?.path || "";
+                    const savedContent = await this.db.get(library, true);
+                    
+                    if (savedContent && !data.force) {
+                        this.io.emit('plex-library-content', { hash: data.hash, content: savedContent });
+                        return;
+                    }
+    
+                    const content = this.FileSystem.getFoldersFromPath(library);
+                    await this.db.save(library, content);
+                    this.io.emit('plex-library-content', { hash: data.hash, content });
+                } catch (err: any) {
+                    this.io.emit('plex-error', { hash: data.hash, message: err.message });
+                }
+            });
+
             socket.on('disconnect', () => {
                 console.log('user disconnected from plex');
             });
         });
     }
 
-    // copy stremio from prev dest to new dest
     private copy = async (hash: string, library: string, dest: string) => {
         try {
             const folderSavedInfo = await this.db.get(hash, true);    
@@ -96,17 +111,14 @@ class Plex extends PlexClient {
 
             if (folderSavedInfo['stremio']['stremioDownloaded']) {
                 const name = folderSavedInfo['stremio']['stremioState']['title'];
-                source = this.FileSystem.joinPath(this.Configuration.config.user.userSaveFolder, name);
+                source = this.FileSystem.joinPath(folderSavedInfo['destination'], name);
             }
 
             if (folderSavedInfo['qbittorrent']['qbittorrentDownloaded'] && source === '') {
                 source = folderSavedInfo['qbittorrent']['qbittorrentMediaPath'];
-            }
-
-            console.log(source, dest);
-            
+            }            
                         
-            const copied = this.FileSystem.copyFolderToPlexServer(source, dest);
+            const copied = await this.FileSystem.copyFolderToPlexServer(source, dest);
             if (!copied) {
                 throw new Error('Unable to copy folder');
             }
@@ -121,6 +133,8 @@ class Plex extends PlexClient {
         } catch (err: any) {
             console.log(err.message);
             this.io.emit('plex-error', { message: err.message });
+        } finally {
+            this.copyFolders.delete(hash);
         }
     };
 }

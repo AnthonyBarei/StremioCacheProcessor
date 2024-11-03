@@ -1,6 +1,6 @@
 import qBittorrentClient from './qbittorrent-client';
 import axios from 'axios';
-import FileSystem from '../filesystem';
+import FileSystem from '../filesystem/filesystem';
 import Configuration from '../configuration';
 import { Express } from 'express';
 import { Server } from 'socket.io';
@@ -40,14 +40,11 @@ class qBittorrent extends qBittorrentClient {
         this.app.post('/api/torrent/trackers', this.AddTorrentTrackers);
 
         this.app.get('/api/torrent/watch', async (req: any, res: any) => {
-            // TODO : PATH IS WRONG
             const hash = req.query.hash;
             if (!hash) return res.status(400).send({ error: 'Missing hash parameter' });
             const info = await this.db.get(hash, true);
             if (info && info.qbittorrent && info.qbittorrent.qbittorrentMediaPath) {
-                const mediaFile = this.FileSystem.getFirstMediaFile(info.qbittorrent.qbittorrentMediaPath)
-                console.log(`Starting video: ${mediaFile}`);
-                
+                const mediaFile = this.FileSystem.getFirstMediaFile(info.qbittorrent.qbittorrentMediaPath)                
                 const videoStarted = this.FileSystem.startVideoHardPath(mediaFile);
                 res.status(200).send({ result: videoStarted });
             } else {
@@ -149,7 +146,7 @@ class qBittorrent extends qBittorrentClient {
 
     private addTorrent = async (hash: string) => {
         const magnet = 'magnet:?xt=urn:btih:' + hash;
-        const category = 'movies'; // personnalize
+        const category = 'SCPDownload'; // personnalize
         
         try {
             // api add torrent
@@ -251,7 +248,7 @@ class qBittorrent extends qBittorrentClient {
         if (!hash) return res.status(400).send({ error: 'Missing hash parameter' });
 
         try {
-            const response = await this.getTorrentInfoApi('movies', hash);
+            const response = await this.getTorrentInfoApi('SCPDownload', hash);
             res.send(response[0]);
         } catch (error: any) {
             res.status(500).send(error);
@@ -262,7 +259,7 @@ class qBittorrent extends qBittorrentClient {
         let downloaded = false;
 
         while (true) {
-            const torrentStatus = await this.getTorrentInfoApi('movies', hash);
+            const torrentStatus = await this.getTorrentInfoApi('SCPDownload', hash);
             const status = torrentStatus[0];
             const errorState = status.state === 'error' || status.state === 'missingFiles';
             const stillDownloading = status.state === 'downloading' || status.state === 'metaDL' || status.state === 'queuedDL' || status.state === 'stalledDL' || status.state === 'checkingDL' || status.state === 'forcedDL';
@@ -310,7 +307,7 @@ class qBittorrent extends qBittorrentClient {
     };
 
     private debugTorrent = async (hash: string) => {
-        const category = 'movies'; // personnalize
+        const category = 'SCPDownload'; // personnalize
         
         try {
             await this.resumeTorrentApi(hash);
@@ -339,7 +336,6 @@ class qBittorrent extends qBittorrentClient {
             await this.updateDBTorrentState(hash, {
                 qbittorrentAdded: false,
                 qbittorrentDownloaded: false,
-                qbittorrentMediaPath: null,
             });
             this.io.emit('torrent-deleted', { hash, message: 'Torrent deleted.' });
         } catch (error: any) {

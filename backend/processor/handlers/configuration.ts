@@ -63,6 +63,10 @@ class Configuration {
             res.send({ storagePath: this.config.plex.plexStoragePath[id] });
         });
 
+        this.app.get('/api/configuration/userSaveFolder', (req, res) => {
+            res.send({ userSaveFolder: this.config.user.userSaveFolder });
+        });
+
 
         this.app.post('/api/configuration/storage-path', async (req, res) => {
             const { key, path, plexPath, title } = req.body;

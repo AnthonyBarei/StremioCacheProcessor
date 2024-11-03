@@ -63,3 +63,9 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.json-key { color: #ce4e44; }
+.json-string { color: #009f00; }
+.json-number { color: #f3de27; }
+.json-boolean { color: #c72ac7; }
+.json-null { color: #a1a1a1; }

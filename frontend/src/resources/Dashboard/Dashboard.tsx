@@ -11,15 +11,19 @@ import { useSocket } from '../../providers/socketProvider';
 
 const Dashboard = () => {
   const [data, setData] = useState<FolderProcess[]>([]);
-  const { socket } = useSocket()
+  const [loading, setLoading] = useState(true);
+  const { socket } = useSocket();
 
-  const handleMeta = useCallback((response: FolderProcess) => {
-    console.log(response);
-    
+  const handleMeta = useCallback((response: FolderProcess) => {    
     setData(prevData => {
-        const exists = prevData.some(item => item.id === response.id);
-        if (!exists) return [response, ...prevData];
-        return prevData;
+        const index = prevData.findIndex(item => item.id === response.id);
+        if (index !== -1) {
+            // Replace the existing item with the new one
+            return [...prevData.slice(0, index), response, ...prevData.slice(index + 1)];
+        } else {
+            // If the item doesn't exist, add it to the start of the array
+            return [response, ...prevData];
+        }
     });
   }, []);
   
@@ -36,7 +40,9 @@ const Dashboard = () => {
   const fetchData = async () => {
     try {
       const response = await axios.post('http://localhost:3000/api/folders'); // replace with your backend endpoint
-      console.log(response.data);
+      if (response.data.success) {
+        setLoading(false);
+      }
     } catch (error) {
       console.error('Error fetching data: ', error);
     }
@@ -48,6 +54,7 @@ const Dashboard = () => {
 
   console.log(data);
   
+
   return (
     <MainLayout>
       <Box sx={{ position: 'relative' }}>
@@ -56,12 +63,10 @@ const Dashboard = () => {
       </Box>
       <Typography variant="body1" align="center" sx={{ mb: 2 }}>Manage your stremio movies and TV shows.</Typography>
 
-      
-
-      {!data || data.length < 1 && (
+      {data && data.length < 1 && (
         <Box sx={{ mb: 2 }}>
-          <Typography variant="body1" align="center" gutterBottom sx={{ mb: 2 }}>Start a video on stremio to start browsing.</Typography>
-          <Loading/>
+          {!loading && <Typography variant="body2" align="center" color="text.secondary">Start a video on stremio to start browsing.</Typography>}
+          {loading && <Loading/>}
         </Box>
       )}
 

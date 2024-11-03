@@ -17,9 +17,11 @@ interface Video {
     released: string;
     stream: Stream;
     thumbnail: string;
+    season?: number;
+    episode?: number;
 }
 
-interface Movie {
+interface Meta {
     cast: Array<string>;
     description: string;
     director: Array<string>;
@@ -37,6 +39,8 @@ interface Movie {
     id: string;
     type: string;
     videos: Array<Video>;
+    season?: number;
+    episode?: number;
 }
 
 interface StremioStateFolderProcess {
@@ -68,9 +72,11 @@ interface qBittorrentStateFolderProcess {
 
 interface FolderProcess {
     id: string;
-    meta: Movie;
+    meta: Meta;
+    selectedMetadata?: Meta;
     stremio: StremioFolderProcess;
     qbittorrent: qBittorrentStateFolderProcess;
+    destination?: string;
 }
 
 interface TorrentFile {
@@ -217,7 +223,7 @@ interface Folder {
 };
 
 export type { 
-    Movie,
+    Meta,
     FolderProcess,
     TorrentFile,
     GridCellExpandProps,

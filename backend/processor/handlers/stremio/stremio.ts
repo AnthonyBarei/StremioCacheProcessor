@@ -2,7 +2,7 @@ import { Express } from "express";
 import { Server } from "socket.io";
 import Database from "../../../db";
 import axios from 'axios';
-import FileSystem from '../filesystem';
+import FileSystem from '../filesystem/filesystem';
 import { calculateDownloadTime } from '../../../utils';
 import StremioClient from './stremio-client';
 import { StremioStateFolderProcess } from '../../../../interfaces';
@@ -31,6 +31,31 @@ class Stremio extends StremioClient {
             res.status(200).send({ connected: this.connected });
         });
 
+        this.app.get('/api/stremio/watch', async (req, res) => {
+            const folder = req.query.folder as string;
+            const title = req.query.title as string;
+
+            if (!folder || !title) {
+                res.status(400).send({ message: 'Folder and title are required' });
+                return;
+            }
+
+            const folderInfo = await this.db.get(folder, true);
+            if (!folderInfo || !folderInfo['stremio'] || !folderInfo['stremio']['stremioMediaPath']) {
+                res.status(400).send({ message: 'Folder not found.' });
+                return;
+            }
+            
+            const started = this.FileSystem.startVideoHardPath(folderInfo['stremio']['stremioMediaPath']);
+
+            if (!started) {
+                res.status(500).send({ message: 'Unable to start video' });
+                return;
+            }
+
+            res.send({ message: 'Video started'});
+        });
+
         this.io.on('connection', (socket: any) => {
             console.log('user connected on stremio');
             
@@ -44,7 +69,7 @@ class Stremio extends StremioClient {
                 }       
 
                 if (this.checkingFolders.has(folder)) {
-                    // this.io.emit('stremio-error', { hash: folder, message: `Folder ${folder} is already being checked` });
+                    this.io.emit('stremio-error', { hash: folder, message: `Folder ${folder} is already being checked` });
                     return;
                 }
                 
@@ -64,18 +89,19 @@ class Stremio extends StremioClient {
                     const stremioState = folderSavedInfo.stremio.stremioState;
                     
                     const file = stremioState.name; // todo: check if this is correct
-                    const dest = stremioState.title;
+                    const dest = this.FileSystem.joinPath(folderSavedInfo.destination, stremioState.title);
 
                     this.io.emit('stremio-copying', { hash: folder, message: 'Copying file.' });
         
                     // clean copy with stremio file name
-                    const copied = this.FileSystem.copyFile(folder, file, dest);
+                    const copied = this.FileSystem.copyFile(folder, file, dest, `${stremioState.title}.mkv`);
                     if (!copied) {
                         this.io.emit('stremio-error', { hash: folder, message: 'Error copying file.' });
                         return;
                     }
                     
                     folderSavedInfo['stremio']['stremioCopied'] = true;
+                    folderSavedInfo['stremio']['stremioMediaPath'] = this.FileSystem.joinPath(dest, `${stremioState.title}.mkv`);
                     await this.db.save(folder, folderSavedInfo);
                     
                     this.io.emit('stremio-copied', { hash: folder });
@@ -206,8 +232,7 @@ class Stremio extends StremioClient {
     private checkDownload = async (folder: string, meta: any, retries: number = 0, lastSize: number = 0): Promise<void> => {
         this.io.emit('stremio-check-info', { hash: folder, message: `Checking download for folder ${folder} | retries: ${retries} | lastSize: ${lastSize}.`});
         
-        let stremioState = await this.processMetaInfo(folder, meta);
-        
+        let stremioState = await this.processMetaInfo(folder, meta);        
         let recheck = false;
 
         if (stremioState.downloadSpeed > 0 && !stremioState.downloaded && stremioState.downloading) {
@@ -216,13 +241,13 @@ class Stremio extends StremioClient {
             } else {
                 retries = 0;
             }
-
-            if (retries < this.Configuration.config.stremio.stremioCheckRetries) {
+            
+            if (retries < this.Configuration.config.stremio.checkRetries) {
                 this.io.emit('stremio-check-info', { hash: folder, message: `Folder ${folder} download size changing, continuing checks.` });
 
                 const ms = stremioState.remainingTime && stremioState.remainingTime !== 0 
-                    ? Math.min(stremioState.remainingTime * 1000, this.Configuration.config.stremio.stremioCheckTimeout) 
-                    : this.Configuration.config.stremio.stremioCheckTimeout;   
+                    ? Math.min(stremioState.remainingTime * 1000, this.Configuration.config.stremio.checkTimeout) 
+                    : this.Configuration.config.stremio.checkTimeout;   
 
                 this.io.emit('stremio-check-info', { hash: folder, message: `Next check in ${ms / 1000} seconds` })             
                 
@@ -233,7 +258,7 @@ class Stremio extends StremioClient {
                 recheck = false;
                 stremioState['downloading'] = false;
             }
-        }
+        }        
         
         const savedInfo = await this.db.get(folder, true);
         if (savedInfo && savedInfo['stremio']) {
@@ -249,7 +274,7 @@ class Stremio extends StremioClient {
         if (recheck) {
             setTimeout(() => {
                 this.checkDownload(folder, meta, retries, stremioState.size);
-            }, this.Configuration.config.stremio.stremioCheckTimeout);
+            }, this.Configuration.config.stremio.checkTimeout);
         } else {
             this.checkingFolders.delete(folder);
             return;

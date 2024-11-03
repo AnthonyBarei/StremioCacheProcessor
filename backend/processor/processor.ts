@@ -2,7 +2,7 @@ import { Express } from "express";
 import { Server } from "socket.io";
 import Database from "../db";
 
-import FileSystem from "./handlers/filesystem";
+import FileSystem from "./handlers/filesystem/filesystem";
 import Stremio from "./handlers/stremio/stremio";
 import qBittorrent from "./handlers/qbittorrent/qbittorrent";
 import axios from "axios";
@@ -30,7 +30,7 @@ class Processor {
         this.Configuration = new Configuration(this.config, this.app, this.db);
         this.Configuration.buildEndpoints();
 
-        this.FileSystem = new FileSystem(this.Configuration);
+        this.FileSystem = new FileSystem(this.Configuration, this.io);
 
         this.Stremio = new Stremio(this.Configuration, this.FileSystem, this.app, this.io, this.db);
         this.Stremio.buildEndpoints();
@@ -64,7 +64,7 @@ class Processor {
             res.send({ success: true });
         });
 
-        this.app.get('/api/connection-safe', async (req, res) => {
+        this.app.get('/api/connection-safe', async (req, res) => {            
             const isConnected = await this.verifySafeConnection();            
             res.send({ safe: isConnected });
         });
@@ -87,35 +87,55 @@ class Processor {
             res.send({ message: 'Folder deleted' });
         });
 
-        this.app.post('/api/folders/:folder/:file/copy', async (req, res) => {
-            const folder = req.params.folder;
-            const file = req.params.file;
-            const dest = req.body.dest;
+        this.app.post('/api/association', async (req, res) => {
+            const folder = req.body.id;
+            const videoId = req.body.videoId.split(':')[0]
+            const season = req.body.videoId.split(':')[1];
+            const episode = req.body.videoId.split(':')[2];
+            let url = '';
 
-            // clean copy with stremio file name
-            const copied = this.FileSystem.copyFile(folder, file, dest);
-            if (!copied) {
-                res.status(500).send({ message: 'Unable to copy folder' });
-                return;
+            if (season && episode) {
+                url = `https://v3-cinemeta.strem.io/meta/series/${videoId}.json`;
+            } else {
+                url = `https://v3-cinemeta.strem.io/meta/movie/${videoId}.json`;
             }
-            const folderSavedInfo = await this.db.get(folder, true);
-            folderSavedInfo['stremio']['stremioCopied'] = true;
-            await this.db.save(folder, folderSavedInfo);
-            res.send({ message: 'Folder copied' });
+            
+            axios.get(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(async response => {
+                const metadata = response.data.meta;
+                const folderSavedInfo = await this.db.get(folder, true);
+                folderSavedInfo['selectedMetadata'] = metadata;
+                
+                if (season && episode) {
+                    folderSavedInfo['selectedMetadata']['season'] = season;
+                    folderSavedInfo['selectedMetadata']['episode'] = episode;
+                    folderSavedInfo['selectedMetadata']['type'] = 'series';
+                }
+
+                await this.db.save(folder, folderSavedInfo);
+
+                res.send({ message: 'Association saved', meta: metadata });
+            }).catch(error => {
+                res.status(500).send({ message: error.message });
+            });
         });
-        
-        this.app.get('/api/watch', async (req, res) => {
-            const folder = req.query.folder as string;
-            const title = req.query.title as string;
 
-            const started = this.FileSystem.startVideo(title);
-
-            if (!started) {
-                res.status(500).send({ message: 'Unable to start video' });
-                return;
+        this.app.patch('/api/type', async (req, res) => {
+            const folder = req.body.folder;
+            const type = req.body.type;
+            const folderSavedInfo = await this.db.get(folder, true);
+            if (folderSavedInfo['selectedMetadata']) {
+                folderSavedInfo['selectedMetadata']['type'] = type;
+            } else {
+                folderSavedInfo['meta']['type'] = type;
             }
-
-            res.send({ message: 'Video started'});
+            folderSavedInfo['destination'] = this.FileSystem.joinPath(this.Configuration.config.user.userSaveFolder + '/' + type.charAt(0).toUpperCase() + type.slice(1));
+            await this.db.save(folder, folderSavedInfo);
+            this.io.emit('meta', { id: folder, ...folderSavedInfo });
+            res.send({ message: 'Type saved' });
         });
     }
 

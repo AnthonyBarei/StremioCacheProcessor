@@ -6,7 +6,7 @@ import { Box, Card, CardContent, CardMedia, IconButton, Tooltip, Typography } fr
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
-import { FolderProcess, StremioStateFolderProcess } from "../../../../interfaces";
+import { FolderProcess, Meta, StremioStateFolderProcess } from "../../../../interfaces";
 
 import StremioState from "../Stremio/StremioState";
 import PlexModal from "../Plex/PlexModal";
@@ -17,10 +17,12 @@ import StremioModal from "../Stremio/StremioModal";
 import TorrentModal from "../Torrent/TorrentModal";
 import TorrentState from "../Torrent/TorrentState";
 import MoreInfoMenu from "./MoreInfoMenu";
+import MetadataModal from "./MetadataModal";
+import AssociationModal from "./AssociationModal";
+import DefineAsModal from "./DefineAsModal";
 
 
 const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeItem: (id: string) => void}) => {  
-  const title = metadata.stremio.stremioState.title || metadata.meta.name;
   // Stremio
   const [stremioModalOpen, setStremioModalOpen] = useState(false);
   const [stremioState, setStremioState] = useState<StremioStateFolderProcess>({
@@ -32,7 +34,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
     progress: 0,
     size: 0,
     downloading: false,
-    title: title,
+    title: '',
   });
   const [stremioWaiting, setStremioWaiting] = useState(false);
   const [stremioDownloaded, setStremioDownloaded] = useState(false);
@@ -46,12 +48,34 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
   const [torrentDownloaded, setTorrentDownloaded] = useState(false);
   // Plex
   const [plexModalOpen, setPlexModalOpen] = useState(false);
+  // Metadata
+  const [title, setTitle] = useState('' as string);
+  const [meta, setMeta] = useState({} as Meta);
+  const [metaModalOpen, setMetaModalOpen] = useState(false);
+  // Association
+  const [associationModalOpen, setAssociationModalOpen] = useState(false);
+  // DegineAs
+  const [defineAsModalOpen, setDefineAsModalOpen] = useState(false);
   // Delete
   const [deleteError, setDeleteError] = useState(false);  
   
   const [selectedDownloadMethod, setSelectedDownloadMethod] = useState<string>('stremio');
 
   useEffect(() => {
+    const type = metadata.selectedMetadata?.type || metadata.meta.type;
+    const defaultTitle = metadata.selectedMetadata?.name || metadata.meta.name;
+    
+    if (type === 'series' || type === 'other') {
+      const season = metadata.selectedMetadata?.season || metadata.meta.videos[0]?.season;
+      const episode = metadata.selectedMetadata?.episode || metadata.meta.videos[0]?.episode;
+      const serieTitle = season && episode ? `${defaultTitle} - S${season}E${episode}` : defaultTitle;
+      setTitle(serieTitle);
+    } else {
+      setTitle(defaultTitle);
+    }
+
+    setMeta(metadata.selectedMetadata || metadata.meta);
+
     setStremioState(metadata.stremio.stremioState);
     setStremioWaiting(metadata.stremio.stremioState.downloading);
     setStremioDownloaded(metadata.stremio.stremioDownloaded);
@@ -67,6 +91,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
     } else {
       setSelectedDownloadMethod('stremio'); // default value
     }
+
   }, [metadata]);
   
   const handleStremio = () => {
@@ -103,8 +128,8 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
     });
   };
   
-  const handleWatch = () => {
-    axios.get(`http://localhost:3000/api/watch?folder=${metadata.id}&title=${title}`).then(() => {
+  const handleStremioWatch = () => {
+    axios.get(`http://localhost:3000/api/stremio/watch?folder=${metadata.id}&title=${title}`).then(() => {
       console.log('Video Started');
     }).catch((err) => {
       console.error(err);
@@ -123,36 +148,41 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', }}>
       <Card sx={{ width: { xs: '100%', lg: '50%' }, height: 'auto', display: 'flex', flexDirection: 'row', mb: 4 }}>
-        <CardMedia component="img" image={metadata.meta.poster} alt={title} sx={{ width: '250px' }}/>
+        <CardMedia component="img" image={meta.poster} alt={title} sx={{ width: '250px' }}/>
         <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
           <CardContent>
             <Typography variant="h5" component="div">{title}</Typography>
             
             <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center'}}>
-              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>{metadata.meta.releaseInfo}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>{meta.releaseInfo}</Typography>
               &nbsp;|&nbsp;
-              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>{metadata.meta.runtime}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>{meta.runtime}</Typography>
               &nbsp;|&nbsp;
-              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>IMDB: {metadata.meta.imdbRating}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{fontWeight: 'bold'}}>IMDB: {meta.imdbRating}</Typography>
             </Box>
 
-            {metadata.meta.director && metadata.meta.director.length > 0 && (
+            {meta.director && meta.director.length > 0 && (
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center'}}>
                 <Typography variant="body2" color="text.primary">Director:</Typography>&nbsp;
-                <Typography variant="body2" color="text.secondary">{metadata.meta.director.join(', ')}</Typography>
+                <Typography variant="body2" color="text.secondary">{meta.director.join(', ')}</Typography>
               </Box>
             )}
 
-            {metadata.meta.cast && metadata.meta.cast.length > 0 && (
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', mb: 2}}>
+            {meta.cast && meta.cast.length > 0 && (
+              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center'}}>
                 <Typography variant="body2" color="text.primary">Cast:</Typography>&nbsp;
-                <Typography variant="body2" color="text.secondary">{metadata.meta.cast.join(', ')}</Typography>
+                <Typography variant="body2" color="text.secondary">{meta.cast.join(', ')}</Typography>
               </Box>
             )}
+
+            <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', mb: 2}}>
+                <Typography variant="body2" color="text.primary">Type:</Typography>&nbsp;
+                <Typography variant="body2" color="text.secondary">{meta.type}</Typography>
+            </Box>
 
             {stremioCopied && (
               <Tooltip title="Watch" placement="top">
-                <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleWatch}>
+                <IconButton aria-label="Watch" sx={{ borderRadius: '10%' }} onClick={handleStremioWatch}>
                   <PlayCircleIcon color="success"/>
                 </IconButton>
               </Tooltip>
@@ -196,11 +226,9 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="More Info" placement="top">
-              <MoreInfoMenu/>
-            </Tooltip>
+            <MoreInfoMenu openMetadata={setMetaModalOpen} openAssociation={setAssociationModalOpen} openDefineAs={setDefineAsModalOpen}/>
 
-            <Typography variant="body2" color="text.secondary" sx={{mt: 2, mb: 2}}>{metadata.meta.description}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{mt: 2, mb: 2}}>{meta.description}</Typography>
 
             {selectedDownloadMethod === 'stremio' && (
               <StremioState 
@@ -210,6 +238,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
                 setWaiting={setStremioWaiting} 
                 copied={stremioCopied} 
                 downloaded={stremioDownloaded}
+                openDefineAs={setDefineAsModalOpen}
               />
             )}
 
@@ -236,6 +265,7 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
         waiting={stremioWaiting} setWaiting={setStremioWaiting}
         copied={stremioCopied} setCopied={setStremioCopied} 
         downloaded={stremioDownloaded} setDownloaded={setStremioDownloaded}
+        openDefineAs={setDefineAsModalOpen}
       />
       <TorrentModal 
         hash={metadata.id} 
@@ -253,6 +283,9 @@ const MediaCard = ({ metadata, removeItem }: { metadata: FolderProcess, removeIt
         setDownloaded={setTorrentDownloaded}
       />
       <PlexModal hash={metadata.id} open={plexModalOpen} setOpen={setPlexModalOpen} />
+      <MetadataModal open={metaModalOpen} setOpen={setMetaModalOpen} metadata={metadata} />
+      <AssociationModal open={associationModalOpen} setOpen={setAssociationModalOpen} metadata={metadata} setMeta={setMeta} setTitle={setTitle}/>
+      <DefineAsModal open={defineAsModalOpen} setOpen={setDefineAsModalOpen} type={meta.type} id={metadata.id}/>
     </Box>
   );
 }

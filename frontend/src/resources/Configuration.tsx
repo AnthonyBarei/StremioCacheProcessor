@@ -151,6 +151,8 @@ const Configuration = () => {
                             fullWidth
                             size='small'
                         />
+                        <Typography variant="body2" sx={{ mt: 1 }}>{userSaveFolder}\Films</Typography>
+                        <Typography variant="body2">{userSaveFolder}\Series</Typography>
                     </Grid>
                     <Grid item xs={12}>
                         <TextField
